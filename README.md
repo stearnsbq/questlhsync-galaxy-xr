@@ -2,126 +2,104 @@
 
 Experimental KernelSU camera backend for Samsung Galaxy XR (SM-I610), used with
 [QuestLHSync](https://github.com/CreoleVR/QuestLHSync) and Virtual Desktop.
-It serves observations from the four outward-facing tracking cameras over the
-existing QuestLHSync protocol. The original PC alignment solver is unchanged.
+It supplies blob observations from four outward-facing tracking cameras. PC
+changes are limited to headset compatibility; the original solver is unchanged.
 
-## Status
+## Current status
 
-Live alignment, including seated acquisition, has been confirmed on one headset
-with measured per-device calibration. This is not a universal calibrated release.
-Only firmware `I610UEU2AZF3` and the pinned QVR client library are supported.
-Face, eye, depth and color passthrough cameras are not alignment inputs.
+Version 0.3.2 uses per-device factory optics, sensor timestamps converted to
+CLOCK_MONOTONIC, and the protocol's half-pixel coordinate convention. Fresh-profile
+live startup and empty-state replay passed timing learning without jump resets
+on one headset running `I610UEU2AZF3`. See [validation results](docs/live-factory-trial.md#validation).
 
-The default build is **diagnostic only**: it emits diagnostic records but no
-calibration or alignment observations. Alignment requires a measured profile or
-an explicit private factory-map trial, and
-a PC driver that supports `kind: galaxy_xr`, `GxrCameraCalibration` and
-`PinholeXY`. Older drivers reject this calibration format.
+This is a private trial, not a generic calibrated release. Preparation still
+requires a saved runtime head-origin transform. Firmware and QVR libraries are
+pinned. Face, eye, depth and color passthrough cameras are not alignment inputs.
 
-## Build
+## Build and install
 
-Install Python 3, Zig (tested with 0.16.0), Clang/LLD and ADB on the build host.
-Connect the supported headset with KernelSU root available through `su`:
+Install Python 3, Zig (tested with 0.16.0), Clang/LLD and ADB. Connect the supported
+headset with KernelSU root available through `su`.
+
+For a **diagnostic-only** module (no calibration or alignment frames):
 
 ```sh
 python build_module.py --serial ADB_TRANSPORT
 ```
 
-The build checks firmware and QVR library hashes, then retrieves `libc.so` and
-`libdl.so` from the device as local link inputs. Those libraries are not included
-in the ZIP or this repository. For subsequent offline builds:
+The build validates firmware and QVR hashes and saves local bionic link inputs
+under `build/bionic`. These vendor libraries are never packaged. Subsequent
+offline builds can use `--bionic-dir build/bionic`.
+
+Output: `build/QuestLHSync-GXR-0.3.2-diagnostic.zip`. Install through KernelSU
+Manager and reboot. If late root loading prevents automatic startup, use the
+module Action button.
+
+For alignment, follow [factory trial setup](docs/live-factory-trial.md). It
+requires the PC patch supporting **`galaxy_xr_sensor`** and a separate profile
+such as `galaxy-xr-sensor-trial`. Older PC builds reject the new calibration kind.
+Existing measured profiles remain available for [legacy rollback](docs/measured-profile.md).
+
+## Factory tools
 
 ```sh
-python build_module.py --bionic-dir build/bionic
-```
-
-The output is `build/QuestLHSync-GXR-0.3.2-diagnostic.zip`. Install it with
-KernelSU Manager and reboot. The module Action button can start an already
-installed service if this device's KernelSU setup did not start it during boot.
-Automatic startup on custom late-loading root configurations remains limited.
-
-Existing live trial profiles can still be built using the
-[measured-profile instructions](docs/measured-profile.md). For experimental live
-factory conversion, follow [private factory trials](docs/live-factory-trial.md).
-Offline replay calibration alone must never be installed with the raw reader.
-
-## Factory calibration
-
-On the supported firmware, boot logs confirm the runtime loads per-device factory
-calibration from `/mnt/vendor/efs/device_profile.textproto`. The profile under
-`/vendor/etc/calibration_service/` is an average-device fallback. Extract the
-factory source without modifying the headset:
-
-```sh
+python -m pip install -r requirements-factory.txt
 python read_factory_calibration.py --serial ADB_TRANSPORT
 python inspect_factory_profile.py build/factory-calibration/factory-device-profile.textproto --output build/factory-calibration/inventory.json
 ```
 
-The factory tracking models include fisheye spline coefficients, distortion offsets
-and curved-window refraction. These cannot be copied into the existing KB4/Fisheye62
-coefficient fields. Experimental factory-ray conversion now acquires alignment in
-saved seated, standing and recentering recordings with the existing solver.
-Native conversion uses a device-bound pixel map. Version 0.3.1 corrects the
-curved-window central projection and avoids the late support collapse in the
-retained regression replay. Automatic startup calibration remains unimplemented;
-the private trial still requires a saved runtime head-origin transform.
-Version 0.3.2 additionally preserves pixel-centre coordinates through the map
-and reports QVR sensor timestamps converted to the daemon's MONOTONIC clock.
-It requires the PC patch supporting `galaxy_xr_sensor`; use a separate profile
-so delivery-time timing estimates are not reused with sensor timestamps.
-See
-[factory calibration investigation](docs/factory-calibration.md) for reproducible
-commands, model assumptions and remaining work.
-Keep the extracted file private and under the ignored `build/` directory.
+The source is `/mnt/vendor/efs/device_profile.textproto`; the profile under
+`/vendor/etc/calibration_service/` is a nominal fallback and must not replace it.
+Keep extracted profiles, head transforms, recordings, images, maps and vendor
+libraries in ignored local directories. Device-bound trial ZIPs are private.
 
-Factory analysis dependencies:
+| Tool | Purpose |
+| --- | --- |
+| `read_factory_calibration.py` | Read the firmware-pinned factory source. |
+| `inspect_factory_profile.py` | Extract four camera models and their validity limits. |
+| `prepare_factory_trial.py` | Build a guarded private factory-map bundle. |
+| `factory_camera_model.py` | Shared spline and curved-window model. |
+| `prepare_factory_replay.py` | Remap raw-pixel recordings for offline investigation. |
+| `evaluate_factory_calibration.py` | Compare fixed factory geometry with saved checkerboard observations. |
 
-```sh
-python -m pip install -r requirements-factory.txt
-```
+Record sessions through the QuestLHSync dashboard to include poses, controllers
+and clock round trips. Factory recordings already contain mapped pixels: replay
+them directly with their exact bundled calibration. The offline converter cannot
+recover sensor timestamps from older delivery-timestamp recordings.
 
-- `read_factory_calibration.py`: retrieve the firmware-pinned factory source.
-- `inspect_factory_profile.py`: inventory the four tracking camera models.
-- `factory_camera_model.py`: spline, distortion-offset and cover-glass ray model.
-- `prepare_factory_replay.py`: convert dashboard recordings for offline replay.
-- `prepare_factory_trial.py`: prepare a private map bundle for the native reader.
-- `evaluate_factory_calibration.py`: validate fixed factory geometry against saved
-  checkerboard observations; this does not fit a replacement camera calibration.
-
-Use the QuestLHSync dashboard's **Record session** for recordings that include
-controller positions and clock round trips. Generated profiles, recordings,
-images and vendor libraries stay in ignored local directories. The former manual
-calibration and standalone recording tools are recoverable from Git history at
-`ac53e6b`.
+[Model details](docs/factory-calibration.md) describe conventions, developer
+checks and remaining work. Earlier experiments and removed manual-calibration
+tools are retained in Git history.
 
 ## Repository layout
 
-- `module/`, `src/`, `vendor/questlhsync/`: KernelSU service and native camera backend.
-- `build_module.py`: guarded diagnostic, measured-profile or private factory-trial builds.
-- `docs/`: factory model validation and live-trial compatibility instructions.
-- `integration/`: the separate upstream PC compatibility patch and PR description.
-- `build/`: ignored local artifacts and private investigation data.
+- `module/`, `src/`, `vendor/questlhsync/`: KernelSU service and native backend.
+- `build_module.py`: diagnostic, factory-trial and legacy measured-profile packaging.
+- `docs/`: current setup, model and validation notes.
+- `integration/`: upstream PC patch, PR description and local installer.
+- `build/`: ignored generated artifacts and private investigation data.
+
+The PC patch targets QuestLHSync 1.14 (`faf2287`). Its scope and validation are
+listed in [the PR description](integration/PR.md).
 
 ## Runtime
 
 Firmware and library guards run before camera access. The reader copies and
-releases QVR buffers before analysis and does not alter exposure settings, camera
-configuration, SELinux policy or vendor overlays. The daemon is static musl;
-the QVR reader runs as a separate Android bionic process.
+releases QVR buffers before analysis. It does not change exposure settings,
+camera configuration, SELinux policy or vendor overlays. The daemon uses static
+musl; the camera reader runs separately with Android bionic.
 
-TCP 47280 serves clients; UDP 47281 provides discovery. As upstream, the service
-is unauthenticated on the LAN. It transmits blob metadata, not camera images.
-Clients must send regular `P` heartbeat messages. Capture stops after the last
-client's idle grace period. Do not run two daemons on the same ports.
+TCP 47280 serves clients and UDP 47281 provides discovery. As upstream, the LAN
+service is unauthenticated and sends blob metadata rather than images. Clients
+must send regular `P` heartbeats. Capture stops after the last client's idle
+grace period. Do not run two daemons on the same ports.
 
-Logs: `/dev/questlhsync-gxr/service.log`. The discovery UUID is randomly generated
-and retained at `/data/adb/questlhsync-gxr/id`; it is not the hardware serial.
-Disabling/removing the module stops the service, and uninstall retains this ID.
+Logs: `/dev/questlhsync-gxr/service.log`. The random discovery UUID persists in
+`/data/adb/questlhsync-gxr/id`; it is not the hardware serial. Disabling/removing
+the module stops its service; uninstall retains the UUID.
 
 ## Attribution
 
-MIT licensed. The vendored daemon/interface and adapted blob detector originate
-from QuestLHSync 1.14 by CreoleVR; see `LICENSE` and `vendor/questlhsync/README.md`.
-No proprietary QVR libraries, extracted firmware or personal calibration data
-are distributed. Changes to PC code are limited to headset compatibility;
-acquisition thresholds, solver cadence and station-identity logic remain upstream.
+MIT licensed. The vendored daemon/interface and adapted detector originate from
+QuestLHSync 1.14 by CreoleVR; see [vendor provenance](vendor/questlhsync/README.md).
+No proprietary libraries, firmware or personal calibration data are distributed.

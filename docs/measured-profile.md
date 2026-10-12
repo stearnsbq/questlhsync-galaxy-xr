@@ -1,4 +1,7 @@
-# Existing measured-profile builds
+# Legacy measured-profile rollback
+
+The current alignment workflow uses [factory optics and sensor timestamps](live-factory-trial.md).
+This path preserves existing measured profiles with delivery timestamps for rollback.
 
 Place private profiles under the ignored `profiles/` directory:
 
@@ -20,9 +23,7 @@ On the PC, enable `driver_questlhsync.anyHmd`. The compatible PC patch also perm
 state. Use the dashboard's headset selection or an explicit host setting as needed.
 Hold a Lighthouse controller and slowly view both stations. Recentring resets
 the pose frame and requires reacquisition.
-
-
 These instructions preserve the measured live baseline and rollback option while
-automatic factory startup calibration is being implemented. Manual calibration generation tools have been
-removed from the current tree; the last complete workflow is in Git history at
+automatic factory preparation is being implemented. Manual calibration generation
+tools have been removed; the last complete workflow is in Git history at
 `ac53e6b`. Existing private v2 profiles remain supported.

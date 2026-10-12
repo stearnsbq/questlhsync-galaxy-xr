@@ -1,29 +1,16 @@
-From d0a0d87a916f468b40e1b9b87ae2b5db15d80b4b Mon Sep 17 00:00:00 2001
-From: stearnsbq <stearnsbq@vcu.edu>
-Date: Mon, 12 Oct 2026 14:27:58 -0400
-Subject: [PATCH] Add Galaxy XR calibration and isolated headset profile
- support
-
----
- docs/galaxy-xr.md          | 24 ++++++++++++++++++++++++
- src/driver/driver_main.cpp | 13 ++++++++++++-
- src/driver/sync.cpp        | 16 +++++++++++++++-
- 3 files changed, 51 insertions(+), 2 deletions(-)
- create mode 100644 docs/galaxy-xr.md
-
 diff --git a/docs/galaxy-xr.md b/docs/galaxy-xr.md
 new file mode 100644
-index 0000000..d576190
+index 0000000..b62e7e8
 --- /dev/null
 +++ b/docs/galaxy-xr.md
-@@ -0,0 +1,24 @@
+@@ -0,0 +1,37 @@
 +# Galaxy XR backend compatibility
 +
 +An experimental external KernelSU backend supplies observations from Galaxy XR's
 +four outward-facing tracking cameras using the existing daemon protocol. Live
-+alignment through Virtual Desktop has been confirmed with measured per-device
-+calibration; generic factory calibration and firmware support are not supplied
-+by this PC change.
++alignment through Virtual Desktop has been validated with a private factory-map
++trial, including sensor timestamps and cold-start timing learning. Factory
++preparation and firmware support are supplied by the separate backend.
 +
 +The calibration JSON uses `kind: "galaxy_xr"` and `GxrCameraCalibration` in place
 +of `CameraCalibration`. The distinct root key ensures older drivers reject the
@@ -31,6 +18,19 @@ index 0000000..d576190
 +`[fx, fy, cx, cy]`, preserving the measured horizontal and vertical focal lengths.
 +Both focal lengths must be positive and all four coefficients finite. Existing
 +Meta calibration and Steam Frame formats retain their current interpretation.
++
++Sensor-stamped backends use `kind: "galaxy_xr_sensor"` with the same camera
++array. Their frame timestamps must already be in the daemon's CLOCK_MONOTONIC
++timebase. This selects the existing sensor-timestamp path: no estimated polling
++lag is subtracted, while automatic pose timing remains active. The QVR backend
++converts its BOOTTIME sensor stamps to MONOTONIC using a freshly sampled clock
++offset, including after suspend. Backends reporting delivery timestamps must
++continue to use `galaxy_xr`. Older compatibility drivers reject the new kind
++because they do not find a legacy `CameraCalibration` array.
++
++The wire format places pixel centres at `n + 0.5`. A backend that converts blob
++coordinates through an optical map must remove that half pixel before lookup
++and restore it afterward; the driver already removes it when constructing rays.
 +
 +Enable `driver_questlhsync.anyHmd` for the external backend. An optional
 +`driver_questlhsync.profile` string isolates state under
@@ -73,22 +73,23 @@ index 7abef38..3b2b7e3 100644
      cfg.dir = dir_;
      g_sync = std::make_unique<Sync>(cfg, [](const std::string &s) { Log(s); });
 diff --git a/src/driver/sync.cpp b/src/driver/sync.cpp
-index 4b1495a..97519f4 100644
+index 4b1495a..3123e31 100644
 --- a/src/driver/sync.cpp
 +++ b/src/driver/sync.cpp
-@@ -105,7 +105,10 @@ bool Optics::Load(const std::string &json, std::string *err) {
+@@ -105,7 +105,11 @@ bool Optics::Load(const std::string &json, std::string *err) {
    if (!JParse(json, root)) { if (err) *err = "calibration isn't JSON"; return false; }
    const JVal *kind = root.get("kind");
    if (kind && kind->t == JVal::Str && kind->s == "steam_frame") return LoadFrame(root, err);
 -  const JVal *cams = root.get("CameraCalibration");
 +  // A separate root key makes older PC drivers reject Galaxy XR profiles
 +  // instead of silently interpreting [fx,fy,cx,cy] as Meta's [f,cx,cy].
-+  bool gxr = kind && kind->t == JVal::Str && kind->s == "galaxy_xr";
++  bool gxr_sensor = kind && kind->t == JVal::Str && kind->s == "galaxy_xr_sensor";
++  bool gxr = gxr_sensor || (kind && kind->t == JVal::Str && kind->s == "galaxy_xr");
 +  const JVal *cams = root.get(gxr ? "GxrCameraCalibration" : "CameraCalibration");
    if (!cams || cams->t != JVal::Arr) { if (err) *err = "no CameraCalibration"; return false; }
    CamCal out[kMaxCam];
    int n = 0;
-@@ -128,6 +131,17 @@ bool Optics::Load(const std::string &json, std::string *err) {
+@@ -128,6 +132,17 @@ bool Optics::Load(const std::string &json, std::string *err) {
        for (int q = 0; q < 3; q++) k.R.m[r][q] = T[r * 4 + q];
      k.t = {T[3], T[7], T[11]};
      k.f = k.fy = pc[0]; k.cx = pc[1]; k.cy = pc[2];
@@ -106,3 +107,12 @@ index 4b1495a..97519f4 100644
      for (int j = 0; j < 6; j++) k.k[j] = dc[j];
      k.p[0] = dc[6]; k.p[1] = dc[7];
      k.ir = sensor && sensor->t == JVal::Str && sensor->s == "OV7251" ? kIR : 1.0;
+@@ -138,7 +153,7 @@ bool Optics::Load(const std::string &json, std::string *err) {
+   for (int i = 0; i < kMaxCam; i++) cams_[i] = out[i];
+   const JVal *dev = root.get("Device"), *type = dev ? dev->get("DeviceType") : nullptr;
+   device_ = type && type->t == JVal::Str ? type->s : "";
+-  exact_time_ = false;
++  exact_time_ = gxr_sensor;  // Backend converted QVR sensor BOOTTIME to daemon MONOTONIC.
+   return true;
+ }
+ 

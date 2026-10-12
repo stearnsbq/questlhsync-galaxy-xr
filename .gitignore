@@ -8,4 +8,12 @@ recordings/
 *.so
 *.dll
 *.exe
+*.obj
+*.pdb
+*.ilk
+*.lib
+*.exp
+*.textproto
+*.pgm
+factory-map.bin
 .env*
