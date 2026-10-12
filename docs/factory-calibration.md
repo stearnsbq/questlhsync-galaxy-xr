@@ -1,7 +1,9 @@
 # Factory calibration investigation
 
-Status: experimental offline conversion, validated on recordings from one Galaxy
-XR running `I610UEU2AZF3`. This does not enable a calibration-free live module.
+Status: experimental conversion, validated on recordings from one Galaxy
+XR running `I610UEU2AZF3`. Version 0.3.0 also supports an explicit
+[private live factory-map trial](live-factory-trial.md). Automatic startup
+calibration is not implemented.
 Keep extracted profiles, libraries, runtime logs and generated outputs under
 ignored `build/`; none is a distributable calibration asset.
 
@@ -178,10 +180,12 @@ current converter.
   configuration's nominal head offset also is not the measured runtime transform.
 - Confirm native curved-window lookup semantics and compare rays over the full
   usable sensor area, including rejection boundaries.
-- Implement guarded on-device factory parsing and ray conversion, validating
-  firmware, source, camera order and frame transforms before emitting alignment
-  observations. Missing/invalid calibration must leave alignment disabled.
+- Replace the private host-generated trial map with automatic on-device factory
+  preparation. Version 0.3.0 validates firmware, factory source hash, serial and
+  bundled calibration/map integrity before enabling native map conversion;
+  preparation still requires an explicitly supplied runtime head transform.
 - Validate live operation, exposure selection, timing, restart/recenter behavior
   and additional headsets before distributing a generic release.
 
-The default module build and upstream PC compatibility patch remain unchanged.
+The default module build remains diagnostic and the upstream PC compatibility
+patch does not change the solver.

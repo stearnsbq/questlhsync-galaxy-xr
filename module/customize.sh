@@ -8,6 +8,6 @@ for f in service.sh action.sh run.sh guard.sh uninstall.sh lhsyncd gxr-lhsight; 
   set_perm "$MODPATH/$f" 0 0 0755
 done
 ui_print 'Native QVR service: TCP 47280 / UDP 47281.'
-ui_print 'Diagnostics unless a measured per-device trial profile was bundled.'
+ui_print 'Diagnostics unless a measured profile or private factory trial was bundled.'
 ui_print 'If late root loading skips startup, use the module Action button.'
 ui_print 'No system overlay, Frida, or SELinux policy changes.'

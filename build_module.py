@@ -8,39 +8,17 @@ from pathlib import Path
 import re
 import shlex
 import subprocess
+import struct
 import zipfile
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE
 FINGERPRINT = 'samsung/xrvst2ue/xrvst2:14/UML2.260301.001/I610UEU2AZF3:user/release-keys'
 LIB_HASH = 'cd34ddf44087a764d67f654b2be77f31fad74fedf164c39193ff5af1f6a62a94'
+VERSION = '0.3.0'
 
 
-def verified_profile(path):
-    """Only accept measured optics in the existing driver's supported model.
-
-    Evidence strings are human validation records, not automatic proof. No default
-    vendor calibration or assumed identity camera-to-HMD transform is supplied.
-    """
-    p = json.loads(path.read_text(encoding='utf-8'))
-    if p.get('schema') != 'questlhsync-gxr-profile-v2' or p.get('fingerprint') != FINGERPRINT:
-        raise ValueError('Profile schema/firmware mismatch')
-    if not re.fullmatch('[a-f0-9]{64}', p.get('device_serial_sha256', '')):
-        raise ValueError('Profile requires SHA256 of this headset serial (without newline)')
-    if p.get('camera_order') != ['tracking:0', 'tracking:1', 'ctrl-tracking:0', 'ctrl-tracking:1']:
-        raise ValueError('Camera order must match QVR buffer indices')
-    if p.get('coordinate_frame') != 'steamvr-hmd' or p.get('timestamp_mode') != 'arrival-monotonic':
-        raise ValueError('Requires measured SteamVR HMD extrinsics and arrival-monotonic timing')
-    evidence = p.get('evidence', {})
-    for key in ('intrinsics', 'camera_order', 'camera_to_hmd', 'short_exposure', 'lighthouse_visibility', 'timing'):
-        if not isinstance(evidence.get(key), str) or len(evidence[key].strip()) < 16:
-            raise ValueError('Missing measurement record: ' + key)
-    exposure = p.get('max_exposure_us')
-    if p.get('frame_selection') != 'exposure-metadata':
-        raise ValueError('Requires the measured Galaxy XR exposure metadata policy')
-    if isinstance(exposure, bool) or not isinstance(exposure, (int, float)) or not 0 < exposure <= 3000:
-        raise ValueError('Validated frames must have exposure <= 3000 us')
-    cal = p['calibration']
+def validate_calibration(cal):
     if cal.get('kind') != 'galaxy_xr' or 'CameraCalibration' in cal:
         raise ValueError('Galaxy XR profiles must be rejected by older PC drivers')
     cams = cal.get('GxrCameraCalibration', [])
@@ -74,18 +52,79 @@ def verified_profile(path):
         det = r[0][0]*(r[1][1]*r[2][2]-r[1][2]*r[2][1])-r[0][1]*(r[1][0]*r[2][2]-r[1][2]*r[2][0])+r[0][2]*(r[1][0]*r[2][1]-r[1][1]*r[2][0])
         if abs(det-1) > 1e-4:
             raise ValueError('Camera rotation must be right-handed')
+
+
+def verified_profile(path):
+    """Only accept measured optics in the existing driver's supported model.
+
+    Evidence strings are human validation records, not automatic proof. No default
+    vendor calibration or assumed identity camera-to-HMD transform is supplied.
+    """
+    p = json.loads(path.read_text(encoding='utf-8'))
+    if p.get('schema') != 'questlhsync-gxr-profile-v2' or p.get('fingerprint') != FINGERPRINT:
+        raise ValueError('Profile schema/firmware mismatch')
+    if not re.fullmatch('[a-f0-9]{64}', p.get('device_serial_sha256', '')):
+        raise ValueError('Profile requires SHA256 of this headset serial (without newline)')
+    if p.get('camera_order') != ['tracking:0', 'tracking:1', 'ctrl-tracking:0', 'ctrl-tracking:1']:
+        raise ValueError('Camera order must match QVR buffer indices')
+    if p.get('coordinate_frame') != 'steamvr-hmd' or p.get('timestamp_mode') != 'arrival-monotonic':
+        raise ValueError('Requires measured SteamVR HMD extrinsics and arrival-monotonic timing')
+    evidence = p.get('evidence', {})
+    for key in ('intrinsics', 'camera_order', 'camera_to_hmd', 'short_exposure', 'lighthouse_visibility', 'timing'):
+        if not isinstance(evidence.get(key), str) or len(evidence[key].strip()) < 16:
+            raise ValueError('Missing measurement record: ' + key)
+    exposure = p.get('max_exposure_us')
+    if p.get('frame_selection') != 'exposure-metadata':
+        raise ValueError('Requires the measured Galaxy XR exposure metadata policy')
+    if isinstance(exposure, bool) or not isinstance(exposure, (int, float)) or not 0 < exposure <= 3000:
+        raise ValueError('Validated frames must have exposure <= 3000 us')
+    cal = p['calibration']
+    validate_calibration(cal)
     return p, (json.dumps(cal, separators=(',', ':'), allow_nan=False) + '\n').encode()
+
+
+def factory_trial_files(directory):
+    manifest = (directory/'factory-trial.json').read_bytes()
+    p = json.loads(manifest)
+    if p.get('schema') != 'questlhsync-gxr-factory-trial-v1' or p.get('firmware') != FINGERPRINT:
+        raise ValueError('Invalid factory trial schema/firmware')
+    for key in ('device_serial_sha256', 'factory_source_sha256', 'map_sha256', 'calibration_sha256', 'head_origin_sha256'):
+        if not re.fullmatch('[a-f0-9]{64}', p.get(key, '')):
+            raise ValueError('Invalid factory trial binding: '+key)
+    if p.get('max_exposure_ns') != 3000000 or p.get('window') != 'mid':
+        raise ValueError('Unsupported factory trial exposure/window')
+    blob = (directory/'factory-map.bin').read_bytes()
+    cal = (directory/'calibration.json').read_bytes()
+    if len(blob)!=20+4*640*640*8 or blob[:20]!=b'GXRMAP1\0'+struct.pack('<III',640,640,4):
+        raise ValueError('Invalid factory map layout')
+    if hashlib.sha256(blob).hexdigest()!=p['map_sha256'] or hashlib.sha256(cal).hexdigest()!=p['calibration_sha256']:
+        raise ValueError('Factory trial content hash mismatch')
+    parsed = json.loads(cal)
+    validate_calibration(parsed)
+    for camera in parsed['GxrCameraCalibration']:
+        if camera['Projection']['Coefficients'] != [200,200,320,320] or camera['Distortion']['Coefficients'] != [0]*8:
+            raise ValueError('Factory map requires matching virtual camera optics')
+    for x,y in struct.iter_unpack('<ff', blob[20:]):
+        if (x,y)!=(-1,-1) and not (0<=x<640 and 0<=y<640):
+            raise ValueError('Invalid factory map coordinate')
+    return {'factory-trial.json': manifest, 'factory-map.bin': blob, 'calibration.json': cal,
+            'device.sha256': (p['device_serial_sha256']+'\n').encode(),
+            'factory-source.sha256': (p['factory_source_sha256']+'\n').encode(),
+            'max-exposure-ns': b'3000000\n'}
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--serial', help='ADB transport serial for local bionic link libraries')
     ap.add_argument('--bionic-dir', type=Path, help='Offline directory containing device libc.so/libdl.so')
-    ap.add_argument('--profile', type=Path, help='Verified per-device profile; otherwise diagnostics only')
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument('--profile', type=Path, help='Verified measured per-device profile')
+    mode.add_argument('--factory-trial', type=Path, help='Private bundle from prepare_factory_trial.py')
     args = ap.parse_args()
     out = HERE / 'build'
     out.mkdir(exist_ok=True)
     profile = verified_profile(args.profile) if args.profile else None
+    factory_files = factory_trial_files(args.factory_trial) if args.factory_trial else None
     adb = ['adb'] + (['-s', args.serial] if args.serial else [])
 
     def run(cmd, **kwargs):
@@ -108,7 +147,7 @@ def main():
             (bionic / name).write_bytes(data)
     env = dict(os.environ, ZIG_GLOBAL_CACHE_DIR=str(out/'zig-global'), ZIG_LOCAL_CACHE_DIR=str(out/'zig-cache'))
     run(['zig', 'cc', '-target', 'aarch64-linux-musl', '-static', '-O2', '-Wall', '-Wextra',
-         '-Werror', '-Wno-unused-but-set-variable', '-DMODULE_VERSION="gxr-0.2.0"',
+         '-Werror', '-Wno-unused-but-set-variable', '-DMODULE_VERSION="gxr-'+VERSION+'"',
          '-DHS_TIMER_CLOCK=CLOCK_BOOTTIME', '-DHS_LOG_CAPTURE_STATUS=1',
          '-I'+str(ROOT/'vendor/questlhsync'), str(ROOT/'vendor/questlhsync/lhsyncd.c'), str(HERE/'src/gxr.c'),
          '-o', str(out/'lhsyncd')], env=env)
@@ -128,13 +167,18 @@ def main():
         files['profile.json'] = args.profile.read_bytes()
         files['max-exposure-ns'] = (str(round(p['max_exposure_us']*1000))+'\n').encode()
         files['profile.sha256'] = ''.join(hashlib.sha256(files[k]).hexdigest()+'  '+k+'\n' for k in ('calibration.json', 'device.sha256', 'profile.json', 'max-exposure-ns')).encode()
+    if factory_files:
+        files.update(factory_files)
+        files['profile.sha256'] = ''.join(hashlib.sha256(data).hexdigest()+'  '+name+'\n'
+                                         for name, data in sorted(factory_files.items())).encode()
     # Directory for temporary deployment always reflects this ZIP, without stale profile files.
     stage = out/'stage'
     stage.mkdir(exist_ok=True)
     for p in stage.iterdir():
         if p.is_file() and p.name not in files:
             p.unlink()
-    zip_path = out / ('QuestLHSync-GXR-0.2.0-'+('trial' if profile else 'diagnostic')+'.zip')
+    variant = 'factory-trial' if factory_files else 'trial' if profile else 'diagnostic'
+    zip_path = out / ('QuestLHSync-GXR-'+VERSION+'-'+variant+'.zip')
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as z:
         for name, data in sorted(files.items()):
             (stage/name).write_bytes(data)

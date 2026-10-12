@@ -1,6 +1,6 @@
 id=questlhsync_gxr
 name=QuestLHSync for Galaxy XR (experimental)
-version=0.2.0
-versionCode=2
+version=0.3.0
+versionCode=3
 author=QuestLHSync contributors
-description=Native QVR tracking-camera service. Diagnostics by default; alignment requires a verified per-device profile. SM-I610 AZF3 only.
+description=Native QVR tracking-camera service. Diagnostics by default; measured profiles and private factory-map trials supported. SM-I610 AZF3 only.

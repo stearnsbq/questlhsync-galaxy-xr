@@ -22,7 +22,7 @@ Hold a Lighthouse controller and slowly view both stations. Recentring resets
 the pose frame and requires reacquisition.
 
 
-These instructions preserve the currently working live trial while factory startup
-calibration is being implemented. Manual calibration generation tools have been
+These instructions preserve the measured live baseline and rollback option while
+automatic factory startup calibration is being implemented. Manual calibration generation tools have been
 removed from the current tree; the last complete workflow is in Git history at
 `ac53e6b`. Existing private v2 profiles remain supported.

@@ -47,6 +47,7 @@ static unsigned long now_ns(void) {
     return (unsigned long)t.sec*1000000000UL+(unsigned long)t.nsec;
 }
 typedef unsigned char u8; typedef unsigned int u32; typedef unsigned long long u64;
+#include "factory_map.h"
 #define MAXB 48
 #define MAXCELL 1600
 static struct {unsigned char scratch[640*640],hot[MAXCELL];unsigned short cells[MAXCELL];int lab[MAXCELL];} S;
@@ -104,6 +105,13 @@ static int analyze(int cam,int seq,unsigned long arrival,int calibrated) {
     }
     if(!calibrated && !audit)return 0;
     if(calibrated && !is_short)return 0;
+    int bx[MAXB],by[MAXB],kept=0;
+    for(int b=0;b<nbl;b++) {
+        int x=(int)(sx[b]/np[b]),y=(int)(sy[b]/np[b]);
+        if(gxr_factory && gxr_map_blob(cam,&x,&y)) {gxr_map_rejected[cam]++;continue;}
+        bx[kept]=x;by[kept]=y;np[kept]=np[b];pk[kept]=pk[b];kept++;
+    }
+    nbl=kept;
     char line[2400];int len;
     if(audit) {
         struct Timespec boot;clock_gettime(7,&boot);
@@ -111,7 +119,7 @@ static int analyze(int cam,int seq,unsigned long arrival,int calibrated) {
         len=snprintf(line,sizeof(line),"I sample %d %u %lu %lu %lu %lu %d %d",cam,(unsigned int)seq,arrival,boot_ns,rawtimes[cam],opaque16[cam],mean,nbl);
     } else len=snprintf(line,sizeof(line),"F %d %u %lu %d %d",cam,(unsigned int)seq,arrival/1000,mean,nbl);
     for(int b=0;b<nbl && len<(int)sizeof(line)-80;b++)
-        len+=snprintf(line+len,sizeof(line)-(usize)len," %llu %llu %u %d",sx[b]/np[b],sy[b]/np[b],np[b],pk[b]);
+        len+=snprintf(line+len,sizeof(line)-(usize)len," %d %d %u %d",bx[b],by[b],np[b],pk[b]);
     line[len++]='\n';return sendall(line,(usize)len);
 }
 int main(int argc,char **argv) {
@@ -124,6 +132,11 @@ int main(int argc,char **argv) {
         int parsed=atoi(limit);
         if(parsed<1 || parsed>3000000)return 2;
         max_exposure_ns=(unsigned long)parsed;
+        const char *map=getenv("QLHS_FACTORY_MAP");
+        if(map && *map) {
+            if(gxr_load_map(map)){dprintf(2,"E invalid factory pixel map; capture refused\n");return 2;}
+            gxr_factory=1;
+        }
     }
     audit=!strcmp(argv[1],"audit");
     int audit_seconds=20;
@@ -231,7 +244,7 @@ int main(int argc,char **argv) {
         if(t-heartbeat>=1000000000UL) {
             heartbeat=t;
             for(int c=0;c<4;c++) {
-                char line[400];int len=snprintf(line,sizeof(line),"I gxr cam=%d frames=%u mean10=%d short_candidates=%u blobs=%u raw_timestamp=%lu opaque16=%lu arrival_ns=%lu mode=%s\n",c,counts[c],means[c],shorts[c],dots[c],rawtimes[c],opaque16[c],seen[c/2],calibrated?"calibrated":"diagnostic");
+                char line[400];int len=snprintf(line,sizeof(line),"I gxr cam=%d frames=%u mean10=%d short_candidates=%u blobs=%u raw_timestamp=%lu opaque16=%lu arrival_ns=%lu mode=%s map_rejected=%u\n",c,counts[c],means[c],shorts[c],dots[c],rawtimes[c],opaque16[c],seen[c/2],gxr_factory?"factory-trial":calibrated?"calibrated":"diagnostic",gxr_map_rejected[c]);
                 if(sendall(line,(usize)len))running=0;
             }
             if(t-seen[0]>10000000000UL||t-seen[1]>10000000000UL){dprintf(2,"W no frames for ten seconds; headset may be asleep\n");break;}

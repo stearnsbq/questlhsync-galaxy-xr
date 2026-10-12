@@ -27,19 +27,8 @@ def quaternion_rotation(q):
                      [2*(x*z-y*w), 2*(y*z+x*w), 1-2*(x*x+y*y)]])
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('recording', type=Path)
-    ap.add_argument('--inventory', type=Path, required=True)
-    ap.add_argument('--head-origin-log', type=Path, required=True)
-    ap.add_argument('--output-dir', type=Path, required=True)
-    ap.add_argument('--window', choices=('none', 'inner', 'outer', 'mid'), required=True)
-    args = ap.parse_args()
-    outputs = [args.output_dir/name for name in ('replay.txt', 'calibration.json', 'notes.json')]
-    inputs = [p.resolve() for p in (args.recording, args.inventory, args.head_origin_log)]
-    if any(p.resolve() in inputs for p in outputs):
-        raise ValueError('Output must not overwrite an input file')
-    inv = json.loads(args.inventory.read_text())
+def load_factory_geometry(inventory, head_origin_log, window):
+    inv = json.loads(inventory.read_text())
     order = {('tracking', '0'): 0, ('tracking', '1'): 1,
              ('ctrl-tracking', '0'): 2, ('ctrl-tracking', '1'): 3}
     cams = sorted(inv['cameras'], key=lambda c: order[c['logical_camera_id'], c['physical_camera_id']])
@@ -47,7 +36,7 @@ def main():
         raise ValueError('Expected one factory entry for each tracking buffer')
     ext = {e['camera_id']: e for e in inv['camera_extrinsics']}
     match = re.search(r'FRAME_IMU_0_t_SENSOR_THIRD_EYE status = 0 r=\[([^]]+)\] t=\[([^]]+)\]',
-                      args.head_origin_log.read_text())
+                      head_origin_log.read_text())
     if not match:
         raise ValueError('No successful runtime third-eye transform in log')
     rv, pos = (np.array([float(v) for v in part.split()]) for part in match.groups())
@@ -59,7 +48,7 @@ def main():
     calibration = []
     for i, c in enumerate(cams):
         validate_camera(c)
-        if args.window != 'none' and 'curved_window' not in c:
+        if window != 'none' and 'curved_window' not in c:
             raise ValueError('Window conversion requires factory window parameters')
         e = ext[c['camera_id']]
         if e['frame_id'] != 'IMU_0':
@@ -73,6 +62,22 @@ def main():
             Shutter={'Type': 'Global'}, Projection={'Model': 'PinholeXY', 'Coefficients': [200, 200, 320, 320]},
             Distortion={'Model': 'Fisheye62', 'Coefficients': [0]*8},
             DeviceFromCamera=(np.linalg.inv(imu_from_head)@imu_from_camera).ravel().tolist()))
+    return inv, cams, {'kind': 'galaxy_xr', 'GxrCameraCalibration': calibration}
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument('recording', type=Path)
+    ap.add_argument('--inventory', type=Path, required=True)
+    ap.add_argument('--head-origin-log', type=Path, required=True)
+    ap.add_argument('--output-dir', type=Path, required=True)
+    ap.add_argument('--window', choices=('none', 'inner', 'outer', 'mid'), required=True)
+    args = ap.parse_args()
+    outputs = [args.output_dir/name for name in ('replay.txt', 'calibration.json', 'notes.json')]
+    inputs = [p.resolve() for p in (args.recording, args.inventory, args.head_origin_log)]
+    if any(p.resolve() in inputs for p in outputs):
+        raise ValueError('Output must not overwrite an input file')
+    inv, cams, calibration = load_factory_geometry(args.inventory, args.head_origin_log, args.window)
     lines = []
     accepted = rejected = frames = 0
     for line in args.recording.read_text().splitlines():
@@ -127,7 +132,7 @@ def main():
     args.output_dir.mkdir(parents=True, exist_ok=True)
     (args.output_dir/'replay.txt').write_text('\n'.join(lines)+'\n')
     (args.output_dir/'calibration.json').write_text(json.dumps(
-        {'kind': 'galaxy_xr', 'GxrCameraCalibration': calibration}, indent=2))
+        calibration, indent=2))
     (args.output_dir/'notes.json').write_text(json.dumps(dict(
         status='offline_remapped_pixels_only_do_not_install', window_hypothesis=args.window,
         frames=frames, accepted_blobs=accepted, rejected_blobs=rejected,

@@ -13,7 +13,8 @@ Only firmware `I610UEU2AZF3` and the pinned QVR client library are supported.
 Face, eye, depth and color passthrough cameras are not alignment inputs.
 
 The default build is **diagnostic only**: it emits diagnostic records but no
-calibration or alignment observations. Alignment requires a measured profile and
+calibration or alignment observations. Alignment requires a measured profile or
+an explicit private factory-map trial, and
 a PC driver that supports `kind: galaxy_xr`, `GxrCameraCalibration` and
 `PinholeXY`. Older drivers reject this calibration format.
 
@@ -34,14 +35,15 @@ in the ZIP or this repository. For subsequent offline builds:
 python build_module.py --bionic-dir build/bionic
 ```
 
-The output is `build/QuestLHSync-GXR-0.2.0-diagnostic.zip`. Install it with
+The output is `build/QuestLHSync-GXR-0.3.0-diagnostic.zip`. Install it with
 KernelSU Manager and reboot. The module Action button can start an already
 installed service if this device's KernelSU setup did not start it during boot.
 Automatic startup on custom late-loading root configurations remains limited.
 
 Existing live trial profiles can still be built using the
-[measured-profile instructions](docs/measured-profile.md). Factory replay output
-is not a replacement for a live profile yet.
+[measured-profile instructions](docs/measured-profile.md). For experimental live
+factory conversion, follow [private factory trials](docs/live-factory-trial.md).
+Offline replay calibration alone must never be installed with the raw reader.
 
 ## Factory calibration
 
@@ -59,8 +61,10 @@ The factory tracking models include fisheye spline coefficients, distortion offs
 and curved-window refraction. These cannot be copied into the existing KB4/Fisheye62
 coefficient fields. Experimental factory-ray conversion now acquires alignment in
 saved seated, standing and recentering recordings with the existing solver.
-Automatic startup calibration and live factory-ray conversion are not implemented;
-the working module still uses its measured profile. See
+Version 0.3.0 adds native conversion using a device-bound pixel map, while
+automatic startup calibration remains unimplemented. The private trial still
+requires a saved runtime head-origin transform and has a known replay regression.
+See
 [factory calibration investigation](docs/factory-calibration.md) for reproducible
 commands, model assumptions and remaining work.
 Keep the extracted file private and under the ignored `build/` directory.
@@ -75,6 +79,7 @@ python -m pip install -r requirements-factory.txt
 - `inspect_factory_profile.py`: inventory the four tracking camera models.
 - `factory_camera_model.py`: spline, distortion-offset and cover-glass ray model.
 - `prepare_factory_replay.py`: convert dashboard recordings for offline replay.
+- `prepare_factory_trial.py`: prepare a private map bundle for the native reader.
 - `evaluate_factory_calibration.py`: validate fixed factory geometry against saved
   checkerboard observations; this does not fit a replacement camera calibration.
 
@@ -87,7 +92,7 @@ calibration and standalone recording tools are recoverable from Git history at
 ## Repository layout
 
 - `module/`, `src/`, `vendor/questlhsync/`: KernelSU service and native camera backend.
-- `build_module.py`: guarded diagnostic or existing measured-profile builds.
+- `build_module.py`: guarded diagnostic, measured-profile or private factory-trial builds.
 - `docs/`: factory model validation and live-trial compatibility instructions.
 - `integration/`: the separate upstream PC compatibility patch and PR description.
 - `build/`: ignored local artifacts and private investigation data.

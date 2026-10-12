@@ -49,7 +49,7 @@ int hs_calibration(char **data, size_t *len, char *name, size_t n) {
   fclose(f);
   if (got != (size_t)size) { free(buf); goto bad; }
   *data = buf; *len = got;
-  snprintf(name, n, "gxr/measured-trial-profile.json");
+  snprintf(name, n, "gxr/%s", getenv("QLHS_FACTORY_MAP") ? "factory-trial.json" : "measured-trial-profile.json");
   return 0;
 bad:
   snprintf(name, n, "GXR calibration unavailable; capture refused");
