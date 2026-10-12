@@ -1,5 +1,8 @@
 # QuestLHSync for Galaxy XR
 
+> [!WARNING]
+> This was made with use of an LLM
+
 Experimental KernelSU module that connects Samsung Galaxy XR tracking cameras to
 [QuestLHSync](https://github.com/CreoleVR/QuestLHSync) for Lighthouse alignment
 with Virtual Desktop and SteamVR.
