@@ -108,6 +108,34 @@ check than the dashboard recordings. Seated conversion retained 23,426 blobs
 and rejected eight out-of-domain blobs. Small differences between window radius
 hypotheses cannot establish the correct model by replay performance alone.
 
+### Fresh 90-second validation capture
+
+A subsequent 90.5-second dashboard recording included 16,135 frames from all four
+cameras, controller positions, stations and clock round trips. The installed
+measured-profile module acquired within the first ten seconds of sampled status
+and remained locked. This was a live baseline capture, not live factory alignment.
+
+With fresh replay state and fixed 45 ms timing, both measured and factory `mid`
+calibration acquired at 11 seconds and confirmed station ordering at 22 seconds.
+At 80 seconds the factory replay had 471/480 station support and a 0.344-degree
+median residual. At 90 seconds support fell to 16/51 and its estimate shifted by
+approximately 7.5 cm and 1.4 degrees relative to its 80-second estimate. The
+measured replay retained 339/389 support at 90 seconds. A second comparison using
+recorded pings and learned timing also reproduced the factory support collapse
+(18/54 at 90 seconds); the issue is not resolved by using automatic timing.
+
+Frame gaps coincided with exposure exceeding the existing 3 ms selection limit.
+During the longest approximately 4.7-second gap, camera frame counters continued
+at about 60 Hz while short-exposure counters stopped, with diagnostic exposure
+values around 3.4–3.8 ms. The source cameras were still running. The module's
+exposure filter withheld alignment frames as designed. Whether this interruption
+triggers the factory fit instability is not yet established.
+
+The extracted factory profile was unchanged. The replay still uses the previously
+observed head-origin transform; it has not been read through a current runtime
+API. This new capture is a regression case to retain when validating the model;
+the earlier successful captures alone are not sufficient for release.
+
 ## Remaining integration work
 
 - Obtain the current head-origin transform reliably through the calibration
