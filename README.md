@@ -39,6 +39,15 @@ Alignment requires the PC patch supporting **`galaxy_xr_sensor`** and a separate
 such as `galaxy-xr-sensor-trial`. Older PC builds reject the new calibration kind.
 Existing measured profiles remain supported through `build_module.py --profile` for legacy rollback.
 
+## GitHub Actions
+
+The `Build module` workflow runs on pushes, pull requests and manual dispatch.
+Download `QuestLHSync-GXR-diagnostic` from the run's artifacts for the installable
+ZIP and its SHA256 checksum. It builds with Zig 0.16.0 and Android NDK r27d's
+API 29 link stubs, without a connected headset or proprietary link inputs.
+The artifact contains diagnostic mode only; calibrated alignment still requires
+the private factory preparation below. CI does not upload device data.
+
 ## Factory trial
 
 ```sh
@@ -69,13 +78,10 @@ Regenerate bundles from older versions rather than reusing their timing metadata
 | `inspect_factory_profile.py` | Extract four camera models and their validity limits. |
 | `prepare_factory_trial.py` | Build a guarded private factory-map bundle. |
 | `factory_camera_model.py` | Shared spline and curved-window model. |
-| `prepare_factory_replay.py` | Remap raw-pixel recordings for offline investigation. |
-| `evaluate_factory_calibration.py` | Compare fixed factory geometry with saved checkerboard observations. |
 
 Record sessions through the QuestLHSync dashboard to include poses, controllers
 and clock round trips. Factory recordings already contain mapped pixels: replay
-them directly with their exact bundled calibration. The offline converter cannot
-recover sensor timestamps from older delivery-timestamp recordings.
+them directly with their exact bundled calibration.
 
 Earlier model notes, experiments and removed manual-calibration tools are
 retained in Git history.

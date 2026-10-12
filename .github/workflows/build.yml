@@ -1,0 +1,78 @@
+name: Build module
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      NDK_VERSION: 27.3.13750724
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Zig 0.16.0
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl --fail --location --retry 3 --output zig.tar.xz https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz
+          echo '70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00  zig.tar.xz' | sha256sum --check
+          tar -xf zig.tar.xz
+          echo "$RUNNER_TEMP/zig-x86_64-linux-0.16.0" >> "$GITHUB_PATH"
+
+      - name: Select Android NDK
+        run: |
+          if [ ! -d "$ANDROID_HOME/ndk/$NDK_VERSION" ]; then
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK_VERSION"
+          fi
+          toolchain="$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64"
+          echo "$toolchain/bin" >> "$GITHUB_PATH"
+          echo "BIONIC_DIR=$toolchain/sysroot/usr/lib/aarch64-linux-android/29" >> "$GITHUB_ENV"
+
+      - name: Check helper syntax and build diagnostic ZIP
+        run: |
+          python3 -m py_compile *.py
+          python3 build_module.py --bionic-dir "$BIONIC_DIR"
+
+      - name: Check package and write checksum
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import zipfile
+          archive, = Path('build').glob('QuestLHSync-GXR-*-diagnostic.zip')
+          with zipfile.ZipFile(archive) as package:
+              assert package.testzip() is None
+              expected = {p.name for p in Path('module').iterdir() if p.is_file()}
+              expected.update(('lhsyncd', 'gxr-lhsight', 'LICENSE', 'README.md'))
+              assert set(package.namelist()) == expected
+              for name in ('lhsyncd', 'gxr-lhsight'):
+                  binary = package.read(name)
+                  assert binary[:6] == b'\x7fELF\x02\x01'
+                  assert int.from_bytes(binary[18:20], 'little') == 183
+                  assert (package.getinfo(name).external_attr >> 16) & 0o111
+              for name in expected:
+                  if name.endswith('.sh'):
+                      assert b'\r' not in package.read(name)
+          PY
+          cd build
+          sha256sum QuestLHSync-GXR-*-diagnostic.zip > SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: QuestLHSync-GXR-diagnostic
+          path: |
+            build/QuestLHSync-GXR-*-diagnostic.zip
+            build/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14

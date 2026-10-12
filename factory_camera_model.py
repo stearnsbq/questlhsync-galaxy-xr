@@ -1,9 +1,8 @@
-"""Factory optics used to prepare private pixel maps and offline replays.
+"""Factory optics used to prepare private pixel maps.
 
 The radial spline is inferred from the firmware's scalar radial evaluator.
 The central curved-window projection uses the firmware's one-metre reference
-plane and 1,000-entry correction lookup. Physical exit rays remain available
-separately for optical investigations.
+plane and 1,000-entry correction lookup.
 """
 from functools import lru_cache
 import numpy as np
@@ -45,7 +44,7 @@ def distorted_radius(theta, coefficients):
     if k.shape != (6,) or not np.all(np.isfinite(k)):
         raise ValueError('Expected six finite spline coefficients')
     if not np.all(np.isfinite(theta)) or np.any(theta < 0) or np.any(theta >= np.pi/2):
-        raise ValueError('Only forward-facing rays supported by this investigation')
+        raise ValueError('Only forward-facing rays are supported')
     segment = np.minimum((theta / (np.pi/6)).astype(int), 2)
     u = theta/(np.pi/6) - segment
     values = np.r_[0., k[::2]]
@@ -80,38 +79,6 @@ def lens_rays(camera, pixels):
     xy = xy*scale[..., None] + camera.get('distortion_offset', [0, 0])
     rays = np.concatenate([xy, np.ones((*xy.shape[:-1], 1))], axis=-1)
     return rays/np.linalg.norm(rays, axis=-1, keepdims=True)
-
-
-def factory_rays(camera, pixels, window=True, radius_is_outer=False, radius_is_mid=False):
-    """Return exit points and unit directions under an explicit sphere hypothesis."""
-    direction = lens_rays(camera, pixels)
-    origin = np.zeros_like(direction)
-    if not window or 'curved_window' not in camera:
-        return origin, direction
-    w = camera['curved_window']
-    center = np.asarray(w['center'])
-    if radius_is_outer and radius_is_mid:
-        raise ValueError('Conflicting window radius conventions')
-    inner = w['radius'] - w['thickness']*(1 if radius_is_outer else .5 if radius_is_mid else 0)
-    outer = inner+w['thickness']
-    for radius, eta in ((inner, 1/w['refractive_index']), (outer, w['refractive_index'])):
-        delta = origin-center
-        dot = np.sum(delta*direction, axis=-1)
-        disc = dot*dot - np.sum(delta*delta, axis=-1)+radius*radius
-        if np.any(disc < 0):
-            raise ValueError('Ray misses curved window')
-        distance = -dot+np.sqrt(disc)
-        if np.any(distance < -1e-9):
-            raise ValueError('Window intersection behind ray origin')
-        origin = origin+distance[..., None]*direction
-        normal = (origin-center)/radius
-        cosine = np.sum(normal*direction, axis=-1)
-        transmitted = 1-eta*eta*(1-cosine*cosine)
-        if np.any(transmitted < 0):
-            raise ValueError('Total internal reflection')
-        direction = eta*direction+(np.sqrt(transmitted)-eta*cosine)[..., None]*normal
-        direction /= np.linalg.norm(direction, axis=-1, keepdims=True)
-    return origin, direction
 
 
 @lru_cache(maxsize=16)

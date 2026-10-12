@@ -7,14 +7,64 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import shlex
 import struct
 import subprocess
 
+import cv2
 import numpy as np
 from build_module import FINGERPRINT, LIB_HASH
-from factory_camera_model import factory_projection_rays, distorted_radius
-from prepare_factory_replay import load_factory_geometry
+from factory_camera_model import factory_projection_rays, distorted_radius, validate_camera
+
+
+def quaternion_rotation(q):
+    if len(q) != 4 or not np.all(np.isfinite(q)):
+        raise ValueError('Invalid factory quaternion')
+    w, x, y, z = q
+    if abs(sum(v*v for v in q)-1) > 1e-4:
+        raise ValueError('Factory quaternion is not normalized')
+    return np.array([[1-2*(y*y+z*z), 2*(x*y-z*w), 2*(x*z+y*w)],
+                     [2*(x*y+z*w), 1-2*(x*x+z*z), 2*(y*z-x*w)],
+                     [2*(x*z-y*w), 2*(y*z+x*w), 1-2*(x*x+y*y)]])
+
+
+def load_factory_geometry(inventory, head_origin_log):
+    inv = json.loads(inventory.read_text())
+    order = {('tracking', '0'): 0, ('tracking', '1'): 1,
+             ('ctrl-tracking', '0'): 2, ('ctrl-tracking', '1'): 3}
+    cams = sorted(inv['cameras'], key=lambda c: order[c['logical_camera_id'], c['physical_camera_id']])
+    if len(cams) != 4 or len({(c['logical_camera_id'], c['physical_camera_id']) for c in cams}) != 4:
+        raise ValueError('Expected one factory entry for each tracking buffer')
+    ext = {e['camera_id']: e for e in inv['camera_extrinsics']}
+    match = re.search(r'FRAME_IMU_0_t_SENSOR_THIRD_EYE status = 0 r=\[([^]]+)\] t=\[([^]]+)\]',
+                      head_origin_log.read_text())
+    if not match:
+        raise ValueError('No successful runtime third-eye transform in log')
+    rv, pos = (np.array([float(v) for v in part.split()]) for part in match.groups())
+    if rv.shape != (3,) or pos.shape != (3,) or not np.all(np.isfinite(np.r_[rv, pos])):
+        raise ValueError('Invalid runtime head transform')
+    imu_from_head = np.eye(4)
+    imu_from_head[:3, :3] = cv2.Rodrigues(rv)[0]
+    imu_from_head[:3, 3] = pos
+    calibration = []
+    for i, c in enumerate(cams):
+        validate_camera(c)
+        if 'curved_window' not in c:
+            raise ValueError('Window conversion requires factory window parameters')
+        e = ext[c['camera_id']]
+        if e['frame_id'] != 'IMU_0':
+            raise ValueError('Factory camera is not in the expected common frame')
+        imu_from_camera = np.eye(4)
+        imu_from_camera[:3, :3] = quaternion_rotation(e['quaternion_wxyz']).T
+        imu_from_camera[:3, 3] = e['position']
+        if not np.all(np.isfinite(imu_from_camera)):
+            raise ValueError('Invalid factory camera transform')
+        calibration.append(dict(Id=i, ImageSize=[640, 640], SensorType='s5k931',
+            Shutter={'Type': 'Global'}, Projection={'Model': 'PinholeXY', 'Coefficients': [200, 200, 320, 320]},
+            Distortion={'Model': 'Fisheye62', 'Coefficients': [0]*8},
+            DeviceFromCamera=(np.linalg.inv(imu_from_head)@imu_from_camera).ravel().tolist()))
+    return inv, cams, {'kind': 'galaxy_xr_sensor', 'GxrCameraCalibration': calibration}
 
 
 def make_map(camera):
@@ -43,8 +93,7 @@ def main():
     ap.add_argument('--head-origin-log', type=Path, required=True)
     ap.add_argument('--output-dir', type=Path, required=True)
     args = ap.parse_args()
-    inv, cams, calibration = load_factory_geometry(args.inventory, args.head_origin_log, 'mid')
-    calibration['kind'] = 'galaxy_xr_sensor'
+    inv, cams, calibration = load_factory_geometry(args.inventory, args.head_origin_log)
 
     def root(command):
         wrapped = command + "; result=$?; printf '\\nQLHS_REMOTE_EXIT=%s\\n' \"$result\""

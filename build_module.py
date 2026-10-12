@@ -125,7 +125,7 @@ def factory_trial_files(directory):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--serial', help='ADB transport serial for local bionic link libraries')
-    ap.add_argument('--bionic-dir', type=Path, help='Offline directory containing device libc.so/libdl.so')
+    ap.add_argument('--bionic-dir', type=Path, help='Directory containing arm64 device or Android NDK libc.so/libdl.so link inputs')
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument('--profile', type=Path, help='Verified measured per-device profile')
     mode.add_argument('--factory-trial', type=Path, help='Private bundle from prepare_factory_trial.py')
