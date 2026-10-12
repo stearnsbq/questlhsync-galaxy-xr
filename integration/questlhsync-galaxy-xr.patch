@@ -1,0 +1,108 @@
+From d0a0d87a916f468b40e1b9b87ae2b5db15d80b4b Mon Sep 17 00:00:00 2001
+From: stearnsbq <stearnsbq@vcu.edu>
+Date: Mon, 12 Oct 2026 14:27:58 -0400
+Subject: [PATCH] Add Galaxy XR calibration and isolated headset profile
+ support
+
+---
+ docs/galaxy-xr.md          | 24 ++++++++++++++++++++++++
+ src/driver/driver_main.cpp | 13 ++++++++++++-
+ src/driver/sync.cpp        | 16 +++++++++++++++-
+ 3 files changed, 51 insertions(+), 2 deletions(-)
+ create mode 100644 docs/galaxy-xr.md
+
+diff --git a/docs/galaxy-xr.md b/docs/galaxy-xr.md
+new file mode 100644
+index 0000000..d576190
+--- /dev/null
++++ b/docs/galaxy-xr.md
+@@ -0,0 +1,24 @@
++# Galaxy XR backend compatibility
++
++An experimental external KernelSU backend supplies observations from Galaxy XR's
++four outward-facing tracking cameras using the existing daemon protocol. Live
++alignment through Virtual Desktop has been confirmed with measured per-device
++calibration; generic factory calibration and firmware support are not supplied
++by this PC change.
++
++The calibration JSON uses `kind: "galaxy_xr"` and `GxrCameraCalibration` in place
++of `CameraCalibration`. The distinct root key ensures older drivers reject the
++new format. `Projection.Model: "PinholeXY"` has four coefficients
++`[fx, fy, cx, cy]`, preserving the measured horizontal and vertical focal lengths.
++Both focal lengths must be positive and all four coefficients finite. Existing
++Meta calibration and Steam Frame formats retain their current interpretation.
++
++Enable `driver_questlhsync.anyHmd` for the external backend. An optional
++`driver_questlhsync.profile` string isolates state under
++`%LOCALAPPDATA%\QuestLHSync\profiles\NAME`; allowed characters are ASCII letters,
++digits, hyphens and underscores. Missing or invalid values retain the existing
++data directory. This prevents a Galaxy XR trial from inheriting another headset's
++station geometry and learned timing. The startup log reports the selected path.
++
++The module is maintained separately. No solver, acquisition cadence, confidence
++threshold, station-identity, dashboard or existing-headset behavior is changed.
+diff --git a/src/driver/driver_main.cpp b/src/driver/driver_main.cpp
+index 7abef38..3b2b7e3 100644
+--- a/src/driver/driver_main.cpp
++++ b/src/driver/driver_main.cpp
+@@ -73,6 +73,17 @@ static std::string DataDir() {
+   std::filesystem::path d;
+   if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &p))) d = std::filesystem::path(p) / "QuestLHSync";
+   CoTaskMemFree(p);
++  // Keep a new headset's station geometry and timing separate from old headsets.
++  char profile[64] = {};
++  vr::EVRSettingsError error;
++  vr::VRSettings()->GetString(kSection, "profile", profile, sizeof(profile), &error);
++  if (error == vr::VRSettingsError_None && profile[0]) {
++    bool valid = true;
++    for (const char *c = profile; *c; c++)
++      if (!( (*c >= 'a' && *c <= 'z') || (*c >= 'A' && *c <= 'Z') ||
++             (*c >= '0' && *c <= '9') || *c == '-' || *c == '_' )) valid = false;
++    if (valid) d /= std::filesystem::path("profiles") / profile;
++  }
+   std::error_code ec;
+   std::filesystem::create_directories(d, ec);
+   return d.string();
+@@ -283,7 +294,7 @@ class Provider : public vr::IServerTrackedDeviceProvider {
+       g_st->version = QLHS_VERSION;
+       g_st->magic = QLHS_MAGIC;
+     }
+-    Log("QuestLHSync " QLHS_RELEASE " driver starting, data in %LOCALAPPDATA%\\QuestLHSync");
++    Log("QuestLHSync " QLHS_RELEASE " driver starting, data in " + dir_);
+     SyncConfig cfg;
+     cfg.dir = dir_;
+     g_sync = std::make_unique<Sync>(cfg, [](const std::string &s) { Log(s); });
+diff --git a/src/driver/sync.cpp b/src/driver/sync.cpp
+index 4b1495a..97519f4 100644
+--- a/src/driver/sync.cpp
++++ b/src/driver/sync.cpp
+@@ -105,7 +105,10 @@ bool Optics::Load(const std::string &json, std::string *err) {
+   if (!JParse(json, root)) { if (err) *err = "calibration isn't JSON"; return false; }
+   const JVal *kind = root.get("kind");
+   if (kind && kind->t == JVal::Str && kind->s == "steam_frame") return LoadFrame(root, err);
+-  const JVal *cams = root.get("CameraCalibration");
++  // A separate root key makes older PC drivers reject Galaxy XR profiles
++  // instead of silently interpreting [fx,fy,cx,cy] as Meta's [f,cx,cy].
++  bool gxr = kind && kind->t == JVal::Str && kind->s == "galaxy_xr";
++  const JVal *cams = root.get(gxr ? "GxrCameraCalibration" : "CameraCalibration");
+   if (!cams || cams->t != JVal::Arr) { if (err) *err = "no CameraCalibration"; return false; }
+   CamCal out[kMaxCam];
+   int n = 0;
+@@ -128,6 +131,17 @@ bool Optics::Load(const std::string &json, std::string *err) {
+       for (int q = 0; q < 3; q++) k.R.m[r][q] = T[r * 4 + q];
+     k.t = {T[3], T[7], T[11]};
+     k.f = k.fy = pc[0]; k.cx = pc[1]; k.cy = pc[2];
++    // Measured Galaxy XR intrinsics retain separate horizontal/vertical focal
++    // lengths. Keep Meta's existing three-coefficient Pinhole layout unchanged.
++    const JVal *projection_model = proj->get("Model");
++    if (projection_model && projection_model->t == JVal::Str && projection_model->s == "PinholeXY") {
++      if (pc.size() != 4 || !std::isfinite(pc[0]) || !std::isfinite(pc[1]) ||
++          !std::isfinite(pc[2]) || !std::isfinite(pc[3]) || pc[0] <= 0 || pc[1] <= 0) {
++        if (err) *err = "PinholeXY requires finite [fx, fy, cx, cy] with positive focal lengths";
++        return false;
++      }
++      k.f = pc[0]; k.fy = pc[1]; k.cx = pc[2]; k.cy = pc[3];
++    }
+     for (int j = 0; j < 6; j++) k.k[j] = dc[j];
+     k.p[0] = dc[6]; k.p[1] = dc[7];
+     k.ir = sensor && sensor->t == JVal::Str && sensor->s == "OV7251" ? kIR : 1.0;
