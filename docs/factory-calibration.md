@@ -53,9 +53,12 @@ transform is embedded in source.
 
 ## Reproduce the offline comparison
 
-Install `requirements-calibration.txt`, then extract/inventory the factory file
-as described in the README. Use a saved checkerboard session from
-`capture_calibration.py` and detections from `fit_tracking_calibration.py`:
+Install `requirements-factory.txt`, then extract/inventory the factory file
+as described in the README. The optional checkerboard comparison consumes saved
+validation data: `metadata.json` with grid width and frame timestamps, and
+`calibration/detections.json` with detected 9x6 corner coordinates. The former
+capture/fitting tools are available in Git history at `ac53e6b`; they are no longer
+part of the module's supported workflow. Existing private captures remain usable:
 
 ```sh
 python evaluate_factory_calibration.py build/factory-calibration/inventory.json build/checkerboard-session --window mid --output build/factory-comparison.json

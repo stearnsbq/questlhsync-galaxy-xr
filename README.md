@@ -39,30 +39,11 @@ KernelSU Manager and reboot. The module Action button can start an already
 installed service if this device's KernelSU setup did not start it during boot.
 Automatic startup on custom late-loading root configurations remains limited.
 
-## Alignment profile
+Existing live trial profiles can still be built using the
+[measured-profile instructions](docs/measured-profile.md). Factory replay output
+is not a replacement for a live profile yet.
 
-Place private profiles under the ignored `profiles/` directory:
-
-```sh
-python build_module.py --bionic-dir build/bionic --profile profiles/my-headset.json
-```
-
-`verified_profile()` in `build_module.py` defines the required v2 schema. It
-requires four 640x640 camera calibrations, measured camera-to-HMD rigid transforms,
-firmware and serial-hash binding, evidence records, and a positive exposure limit
-no greater than 3000 microseconds. Evidence text is a measurement record, not an
-automated guarantee of accuracy. No guessed/default alignment profile is supplied.
-
-The resulting trial ZIP contains private calibration and device-binding data;
-do not publish it as a general-purpose release.
-
-On the PC, enable `driver_questlhsync.anyHmd`. The compatible PC patch also permits
-`driver_questlhsync.profile` (for example `galaxy-xr`) to isolate this headset's
-state. Use the dashboard's headset selection or an explicit host setting as needed.
-Hold a Lighthouse controller and slowly view both stations. Recentring resets
-the pose frame and requires reacquisition.
-
-## Calibration and diagnostics
+## Factory calibration
 
 On the supported firmware, boot logs confirm the runtime loads per-device factory
 calibration from `/mnt/vendor/efs/device_profile.textproto`. The profile under
@@ -84,36 +65,32 @@ the working module still uses its measured profile. See
 commands, model assumptions and remaining work.
 Keep the extracted file private and under the ignored `build/` directory.
 
-Optional image-analysis dependencies:
+Factory analysis dependencies:
 
 ```sh
-python -m pip install -r requirements-calibration.txt
+python -m pip install -r requirements-factory.txt
 ```
 
-- `capture_calibration.py`: camera images and optional synchronized HMD poses.
-- `fit_tracking_calibration.py`: checkerboard intrinsics and stereo validation.
-- `fit_hand_eye.py`: measured camera-to-HMD candidate transforms.
-- `capture_lighthouses.py`: offline blobs, HMD poses, stations and clock samples.
-- `prepare_replay.py`: convert an audit for the upstream replay executable;
-  `--max-exposure-us` and `--output-dir` support offline comparisons.
-- `triangulate_spots.py`: source-ray consistency analysis, not station identity proof.
-- `inspect_factory_profile.py PROFILE --output build/inventory.json`: inventory
-  tracking-camera intrinsics and extrinsics from a saved device-profile textproto.
-  This does not convert distortion models or enable alignment. The runtime-selected
-  per-device source and its coordinate-frame conventions still require validation.
-- `evaluate_factory_calibration.py`: compare fixed factory geometry with saved
-  checkerboard observations, fitting only board poses.
-- `prepare_factory_replay.py`: remap recorded raw blobs using factory optics for
-  offline replay. Its generated calibration **must not be installed** with the
-  live raw-pixel reader.
-- `build_pose_recorder.cmd PATH_TO_QUESTLHSYNC`: build the Windows pose recorder
-  using Visual Studio and OpenVR files from a QuestLHSync checkout. Run the
-  resulting executable from `build/` while SteamVR is open.
+- `read_factory_calibration.py`: retrieve the firmware-pinned factory source.
+- `inspect_factory_profile.py`: inventory the four tracking camera models.
+- `factory_camera_model.py`: spline, distortion-offset and cover-glass ray model.
+- `prepare_factory_replay.py`: convert dashboard recordings for offline replay.
+- `evaluate_factory_calibration.py`: validate fixed factory geometry against saved
+  checkerboard observations; this does not fit a replacement camera calibration.
 
-Use each Python command's `--help` for arguments. Raw calibration observations,
-images, libraries, profiles and recordings belong in ignored local directories.
-The separate pose recorder does not record controller trajectories; use the
-QuestLHSync dashboard's **Record session** for full live alignment diagnostics.
+Use the QuestLHSync dashboard's **Record session** for recordings that include
+controller positions and clock round trips. Generated profiles, recordings,
+images and vendor libraries stay in ignored local directories. The former manual
+calibration and standalone recording tools are recoverable from Git history at
+`ac53e6b`.
+
+## Repository layout
+
+- `module/`, `src/`, `vendor/questlhsync/`: KernelSU service and native camera backend.
+- `build_module.py`: guarded diagnostic or existing measured-profile builds.
+- `docs/`: factory model validation and live-trial compatibility instructions.
+- `integration/`: the separate upstream PC compatibility patch and PR description.
+- `build/`: ignored local artifacts and private investigation data.
 
 ## Runtime
 
