@@ -1,15 +1,15 @@
-# Private live factory trial (0.3.0)
+# Private live factory trial (0.3.1)
 
 This trial converts blob coordinates inside the Galaxy XR reader. It uses the
-factory spline, distortion offset, cover-window midpoint model and validity
+factory spline, distortion offset, cover-window central projection and validity
 radii to build a 640x640 lookup map for each of four cameras. The PC receives
 virtual equidistant pixels with a matching calibration through the existing
 Galaxy XR compatibility patch. The alignment solver is unchanged.
 
 This is **not a generic calibrated release**. Preparation requires ADB root,
 the current factory profile inventory and a saved successful runtime head-origin
-transform. Automatic head-origin lookup is still missing. The model has a known
-late support-collapse case in recorded-data validation; see
+transform. Automatic head-origin lookup is still missing. Version 0.3.1 fixes a
+projection mismatch and avoids the earlier late support-collapse replay; see
 [the investigation](factory-calibration.md). Keep a measured-profile rollback.
 
 ## Prepare and build
@@ -22,7 +22,7 @@ python prepare_factory_trial.py --serial ADB_TRANSPORT --inventory build/factory
 python build_module.py --bionic-dir build/bionic --factory-trial build/factory-trial
 ```
 
-Output: `build/QuestLHSync-GXR-0.3.0-factory-trial.zip`. This ZIP contains private,
+Output: `build/QuestLHSync-GXR-0.3.1-factory-trial.zip`. This ZIP contains private,
 device-bound derived calibration. Do not publish it as a generic release.
 `--factory-trial` and the existing measured `--profile` option are mutually
 exclusive. A build without either option remains diagnostic.
@@ -32,6 +32,12 @@ then binds the bundle to the headset serial hash. The launcher checks the bundle
 manifest and current source/serial before capture. The native reader rejects a
 bad map header, wrong dimensions, truncated/trailing data and invalid coordinates.
 No missing-data fallback to guessed optics is provided.
+
+Regenerate maps for 0.3.1: the builder rejects older bundles without
+`projection_model: window-plane-1m-lut1000`. The midpoint glass surfaces feed
+a central projection onto a plane one metre along the window axis, with the
+firmware's 1,000-entry correction lookup. Using the outgoing physical direction
+alone, as in 0.3.0, is a different camera model.
 
 Maps use little-endian float pairs and bilinear interpolation. Invalid corners
 reject the blob conservatively. The existing 3 ms exposure limit, detector,
@@ -80,5 +86,37 @@ one sampled peak of 9.45 ms. Ending station support was 2,752/4,480.
 This recording began after live acquisition. Replaying it from fresh state with
 recorded pings initially selected a mirrored solution at 21 seconds, corrected
 it at 42 seconds, and ended with both stations supported. It does not establish
-repeatable startup acquisition or absolute positional accuracy. The earlier
-regression recording remains unresolved even though this live check was stable.
+repeatable startup acquisition or absolute positional accuracy. This is historical
+0.3.0 evidence; it does not validate the updated 0.3.1 map.
+
+## Projection correction validation
+
+The 0.3.1 native-map replay of the failing raw recording ends at 1,302/1,118
+station support and 0.331-degree median residual with recorded pings and learned
+timing, without the late support collapse. It accepts the same 50,802 blobs as
+the previous native map. Numerical agreement with the revised Python projection
+is within 0.071 pixels including wire rounding.
+
+The seated and recenter recordings retain their previous behavior; the seated
+ping-based replay still has the existing unresolved station-mirror ambiguity.
+Correcting the projection changes acquisition history in the failing capture,
+so one successful replay is not proof that all jump events are eliminated.
+No PC solver, acquisition threshold, exposure gate or timing behavior was changed.
+
+## Live 0.3.1 check
+
+A 90.49-second recording after deployment contained 9,068 converted frames
+(2,267 per camera) and no error records. The driver had detected a real HMD pose
+break after a 384-second pose gap before recording. It reacquired approximately
+30 seconds into recording and stayed locked in all subsequent sampled statuses,
+ending at 768/627 station support. Post-acquisition median residuals were
+0.300-0.318 degrees; median round trip was 3.64 ms and the sampled maximum 4.11 ms.
+Long exposures still caused intervals without selected alignment frames.
+
+A replay with only the live session's previously learned 47.025 ms timing,
+and otherwise fresh state, ends at 659/604 support without a jump. A fully fresh
+replay starting at the upstream 18 ms default instead learns approximately 51 ms
+at 65 seconds and triggers a support reset near 70 seconds, ending at 71/75.
+This remains a cold-start timing limitation: the live pass and the corrected
+original regression do not establish reliable startup without learned timing.
+No timing override or upstream solver modification was introduced to conceal it.

@@ -7,12 +7,12 @@ This is a developer investigation tool, not an alignment-profile generator.
 import argparse,json
 from pathlib import Path
 import numpy as np,cv2
-from factory_camera_model import factory_rays, validate_camera
+from factory_camera_model import factory_rays, factory_projection_rays, validate_camera
 ap=argparse.ArgumentParser(description=__doc__)
 ap.add_argument('inventory',type=Path)
 ap.add_argument('session',type=Path)
 ap.add_argument('--output',type=Path,required=True)
-ap.add_argument('--window',choices=('none','inner','outer','mid'),required=True)
+ap.add_argument('--window',choices=('none','inner','outer','mid','native'),required=True)
 args=ap.parse_args()
 session=args.session
 inv=json.loads(args.inventory.read_text()); cams=inv['cameras']; ext=inv['camera_extrinsics']
@@ -33,7 +33,11 @@ def rotation(q):
 observations={}
 for d in det:
  if d['detected']:
-  c=d['camera']; origins,rays=factory_rays(cams[c],d['corners'],args.window!='none',args.window=='outer',args.window=='mid')
+  c=d['camera']
+  if args.window=='native':
+   rays=factory_projection_rays(cams[c],d['corners']);origins=np.zeros_like(rays)
+  else:
+   origins,rays=factory_rays(cams[c],d['corners'],args.window!='none',args.window=='outer',args.window=='mid')
   observations.setdefault(d['sample'],{})[c]=(origins,rays)
 results={}
 for mode in ('R-p','RT-p','RT-inverse-p','R-inverse-p'):

@@ -1,8 +1,11 @@
-"""Experimental offline factory ray model; never used by the installed module.
+"""Factory optics used to prepare private pixel maps and offline replays.
 
 The radial spline is inferred from the firmware's scalar radial evaluator.
-Curved-window interpretation still requires validation against native output.
+The central curved-window projection uses the firmware's one-metre reference
+plane and 1,000-entry correction lookup. Physical exit rays remain available
+separately for optical investigations.
 """
+from functools import lru_cache
 import numpy as np
 
 
@@ -109,3 +112,49 @@ def factory_rays(camera, pixels, window=True, radius_is_outer=False, radius_is_m
         direction = eta*direction+(np.sqrt(transmitted)-eta*cosine)[..., None]*normal
         direction /= np.linalg.norm(direction, axis=-1, keepdims=True)
     return origin, direction
+
+
+@lru_cache(maxsize=16)
+def _window_lookup(center, radius, thickness, refractive_index):
+    """Axisymmetric refraction followed by the native central approximation."""
+    distance = float(np.linalg.norm(center))
+    if distance <= 0 or distance > radius-thickness/2:
+        raise ValueError('Unsupported window centre outside inner sphere')
+    cosine = np.linspace(-1., 1., 1000)
+    sine = np.sqrt(1-cosine*cosine)
+    direction = np.column_stack((cosine, sine))
+    origin = np.zeros_like(direction)
+    sphere_center = np.array([-distance, 0.])
+    for surface, eta in ((radius-thickness/2, 1/refractive_index),
+                         (radius+thickness/2, refractive_index)):
+        delta = origin-sphere_center
+        dot = np.sum(delta*direction, axis=1)
+        travel = -dot+np.sqrt(dot*dot-np.sum(delta*delta, axis=1)+surface*surface)
+        origin = origin+travel[:, None]*direction
+        normal = (origin-sphere_center)/surface
+        incidence = np.sum(normal*direction, axis=1)
+        direction = eta*direction+(np.sqrt(1-eta*eta*(1-incidence*incidence))
+                                   -eta*incidence)[:, None]*normal
+        direction /= np.linalg.norm(direction, axis=1)[:, None]
+    # The firmware uses a plane one metre along -centre/|centre|, not infinity
+    # and not camera z=1. Store the amount to subtract along that axis.
+    travel = (1.-origin[:, 0])/direction[:, 0]
+    target = origin+travel[:, None]*direction
+    correction = cosine-np.divide(sine*target[:, 0], target[:, 1],
+                                  out=np.zeros_like(sine), where=sine>0)
+    correction[[0, -1]] = 0.  # Native lookup's axial endpoint convention.
+    if not np.all(np.isfinite(correction)):
+        raise ValueError('Invalid curved-window lookup')
+    return cosine, correction
+
+
+def factory_projection_rays(camera, pixels):
+    """Central camera rays for the factory model, suitable for QuestLHSync."""
+    rays = lens_rays(camera, pixels)
+    w = camera['curved_window']
+    center = tuple(w['center'])
+    cosine, correction = _window_lookup(center, w['radius'], w['thickness'], w['refractive_index'])
+    axis = -np.asarray(center)/np.linalg.norm(center)
+    amount = np.interp(rays@axis, cosine, correction)
+    rays = rays-amount[:, None]*axis
+    return rays/np.linalg.norm(rays, axis=1)[:, None]

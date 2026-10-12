@@ -15,7 +15,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE
 FINGERPRINT = 'samsung/xrvst2ue/xrvst2:14/UML2.260301.001/I610UEU2AZF3:user/release-keys'
 LIB_HASH = 'cd34ddf44087a764d67f654b2be77f31fad74fedf164c39193ff5af1f6a62a94'
-VERSION = '0.3.0'
+VERSION = '0.3.1'
 
 
 def validate_calibration(cal):
@@ -93,6 +93,8 @@ def factory_trial_files(directory):
             raise ValueError('Invalid factory trial binding: '+key)
     if p.get('max_exposure_ns') != 3000000 or p.get('window') != 'mid':
         raise ValueError('Unsupported factory trial exposure/window')
+    if p.get('projection_model') != 'window-plane-1m-lut1000':
+        raise ValueError('Regenerate factory trial: central window projection required')
     blob = (directory/'factory-map.bin').read_bytes()
     cal = (directory/'calibration.json').read_bytes()
     if len(blob)!=20+4*640*640*8 or blob[:20]!=b'GXRMAP1\0'+struct.pack('<III',640,640,4):

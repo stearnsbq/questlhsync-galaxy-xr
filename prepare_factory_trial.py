@@ -1,7 +1,7 @@
 """Build a private factory pixel-map trial; requires a saved runtime head transform.
 
-This is not automatic startup calibration or a generic release. The candidate
-model still has a known replay regression. No installation is performed here.
+This is not automatic startup calibration or a generic release.
+No installation is performed here.
 """
 import argparse
 import hashlib
@@ -13,7 +13,7 @@ import subprocess
 
 import numpy as np
 from build_module import FINGERPRINT, LIB_HASH
-from factory_camera_model import factory_rays, distorted_radius
+from factory_camera_model import factory_projection_rays, distorted_radius
 from prepare_factory_replay import load_factory_geometry
 
 
@@ -25,7 +25,7 @@ def make_map(camera):
         np.arctan(camera['max_valid_undistorted_radius']), camera['distortion_coefficients'])))
     valid = np.linalg.norm(normalized, axis=1) <= limit
     indices = np.flatnonzero(valid)
-    _, rays = factory_rays(camera, pixels[valid], radius_is_mid=True)
+    rays = factory_projection_rays(camera, pixels[valid])
     r = np.linalg.norm(rays[:, :2], axis=1)
     theta = np.arctan2(r, rays[:, 2])
     scale = np.divide(200*theta, r, out=np.full_like(r, 200), where=r>1e-12)
@@ -76,8 +76,9 @@ def main():
         map_sha256=hashlib.sha256(blob).hexdigest(), calibration_sha256=hashlib.sha256(cal).hexdigest(),
         head_origin_sha256=hashlib.sha256(args.head_origin_log.read_bytes()).hexdigest(),
         max_exposure_ns=3000000, window='mid', valid_grid_points=valid,
+        projection_model='window-plane-1m-lut1000',
         head_origin_source='saved_runtime_log_not_automatic',
-        status='experimental_private_trial_known_replay_regression')
+        status='experimental_private_trial')
     args.output_dir.mkdir(parents=True, exist_ok=True)
     (args.output_dir/'factory-map.bin').write_bytes(blob)
     (args.output_dir/'calibration.json').write_bytes(cal)

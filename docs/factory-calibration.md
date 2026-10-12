@@ -173,13 +173,49 @@ within bounds and their ray residuals are unchanged. The original table above
 records the earlier unbounded results; it should not be read as results from the
 current converter.
 
+### Central projection correction (0.3.1)
+
+Further inspection of the pinned firmware establishes that its curved-window
+constructor sets a one-metre reference distance. Its lookup builder intersects
+the refracted exit ray with a plane normal to the window axis (the negated,
+normalized sphere centre), then builds a 1,000-entry correction table indexed
+by incident-ray cosine. This is a central camera approximation, rather than the
+far-field physical direction used by the original trial converter.
+
+`factory_projection_rays` now implements that projection and lookup for private
+maps. `factory_rays` retains physical exit origins/directions for investigations.
+Use `prepare_factory_replay.py --window native` for raw recordings intended to
+represent the revised factory model; never convert already-mapped recordings.
+The builder requires the new projection-model manifest field, preventing stale
+far-field maps from being packaged as corrected trials.
+
+On the retained 90-second regression, direct conversion ends at 1,303/1,125
+support with recorded pings and learned timing. The actual C map reader, including
+bilinear interpolation and wire rounding, ends at 1,302/1,118, median 0.331
+degrees, without the late jump. Previously the same native path ended at 17/54.
+The direct fixed-45-ms check also retains support (1,381/1,192).
+
+The native map accepts 50,802 of 53,023 blobs, unchanged from 0.3.0, and agrees
+with the analytical projection within 0.071 pixels including quantization.
+Fixed-45-ms seated and recenter checks retain 412/389 and 353/666 support.
+All 29 checkerboard comparison views remain valid; the median angular
+pixel-equivalent RMS is 0.708, versus 0.737 for the earlier physical-window model.
+
+The correction is grounded in firmware semantics, not fitted to this recording.
+It changes acquisition history as well as ray residuals; these checks establish
+that the retained late-collapse reproduction passes, not universal immunity to
+tracking jumps. Initial station-mirror ambiguity remains in some recordings,
+including the seated ping-based replay both before and after this correction.
+The PC solver and all acquisition, exposure and timing thresholds are unchanged.
+
 ## Remaining integration work
 
 - Obtain the current head-origin transform reliably through the calibration
   service. Boot logs rotate and cannot be the production dependency. A device
   configuration's nominal head offset also is not the measured runtime transform.
-- Confirm native curved-window lookup semantics and compare rays over the full
-  usable sensor area, including rejection boundaries.
+- Compare full model output directly against the native calibration service over
+  the usable sensor area, including rejection boundaries. The central-window
+  semantics are now established, but bitwise native-model parity is not claimed.
 - Replace the private host-generated trial map with automatic on-device factory
   preparation. Version 0.3.0 validates firmware, factory source hash, serial and
   bundled calibration/map integrity before enabling native map conversion;

@@ -35,7 +35,7 @@ in the ZIP or this repository. For subsequent offline builds:
 python build_module.py --bionic-dir build/bionic
 ```
 
-The output is `build/QuestLHSync-GXR-0.3.0-diagnostic.zip`. Install it with
+The output is `build/QuestLHSync-GXR-0.3.1-diagnostic.zip`. Install it with
 KernelSU Manager and reboot. The module Action button can start an already
 installed service if this device's KernelSU setup did not start it during boot.
 Automatic startup on custom late-loading root configurations remains limited.
@@ -61,9 +61,10 @@ The factory tracking models include fisheye spline coefficients, distortion offs
 and curved-window refraction. These cannot be copied into the existing KB4/Fisheye62
 coefficient fields. Experimental factory-ray conversion now acquires alignment in
 saved seated, standing and recentering recordings with the existing solver.
-Version 0.3.0 adds native conversion using a device-bound pixel map, while
-automatic startup calibration remains unimplemented. The private trial still
-requires a saved runtime head-origin transform and has a known replay regression.
+Native conversion uses a device-bound pixel map. Version 0.3.1 corrects the
+curved-window central projection and avoids the late support collapse in the
+retained regression replay. Automatic startup calibration remains unimplemented;
+the private trial still requires a saved runtime head-origin transform.
 See
 [factory calibration investigation](docs/factory-calibration.md) for reproducible
 commands, model assumptions and remaining work.

@@ -13,7 +13,7 @@ import re
 
 import cv2
 import numpy as np
-from factory_camera_model import factory_rays, validate_camera
+from factory_camera_model import factory_rays, factory_projection_rays, validate_camera
 
 
 def quaternion_rotation(q):
@@ -71,13 +71,18 @@ def main():
     ap.add_argument('--inventory', type=Path, required=True)
     ap.add_argument('--head-origin-log', type=Path, required=True)
     ap.add_argument('--output-dir', type=Path, required=True)
-    ap.add_argument('--window', choices=('none', 'inner', 'outer', 'mid'), required=True)
+    ap.add_argument('--window', choices=('none', 'inner', 'outer', 'mid', 'native'), required=True,
+                    help='native matches the central factory projection; other modes investigate physical exit rays')
     args = ap.parse_args()
     outputs = [args.output_dir/name for name in ('replay.txt', 'calibration.json', 'notes.json')]
     inputs = [p.resolve() for p in (args.recording, args.inventory, args.head_origin_log)]
     if any(p.resolve() in inputs for p in outputs):
         raise ValueError('Output must not overwrite an input file')
     inv, cams, calibration = load_factory_geometry(args.inventory, args.head_origin_log, args.window)
+    def convert(camera, pixels):
+        if args.window == 'native':
+            return factory_projection_rays(camera, pixels)
+        return factory_rays(camera, pixels, args.window != 'none', args.window == 'outer', args.window == 'mid')[1]
     lines = []
     accepted = rejected = frames = 0
     for line in args.recording.read_text().splitlines():
@@ -99,7 +104,7 @@ def main():
             try:
                 ray_batch = np.full((count, 3), np.nan)
                 if np.any(valid_pixels):
-                    _, ray_batch[valid_pixels] = factory_rays(camera, pixels[valid_pixels], args.window != 'none', args.window == 'outer', args.window == 'mid')
+                    ray_batch[valid_pixels] = convert(camera, pixels[valid_pixels])
             except ValueError:
                 ray_batch = None  # Retry individually so one out-of-domain blob cannot discard the frame.
         for j in range(count):
@@ -109,7 +114,7 @@ def main():
                 continue
             try:
                 if ray_batch is None:
-                    _, rays = factory_rays(cams[cam], [[x/10, y/10]], args.window != 'none', args.window == 'outer', args.window == 'mid')
+                    rays = convert(cams[cam], [[x/10, y/10]])
                     ray = rays[0]
                 else:
                     ray = ray_batch[j]
