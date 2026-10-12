@@ -24,6 +24,11 @@ offset and a curved cover window. The Python model implements:
    `inner` and `outer` retain earlier hypotheses for comparison; `none` disables
    the window explicitly.
 
+Conversion also enforces each camera's `max_valid_distorted_radius` and
+`max_valid_undistorted_radius`. Regenerate inventories made before these fields
+were extracted; the converter rejects inventories without the factory limits.
+Blobs outside that calibrated domain are omitted before virtual-pixel conversion.
+
 This is an independently implemented experimental model inferred by inspecting
 the locally installed firmware. It is not yet verified numerically against the
 native runtime's lookup-table output. Useful function addresses in the pinned
@@ -135,6 +140,36 @@ The extracted factory profile was unchanged. The replay still uses the previousl
 observed head-origin transform; it has not been read through a current runtime
 API. This new capture is a regression case to retain when validating the model;
 the earlier successful captures alone are not sufficient for release.
+
+### Radius validation and jump diagnosis
+
+Investigation of the fresh capture found that the initial converter omitted the
+factory's calibrated radius limits. Enforcing them rejects 2,118 of 53,023 blobs
+in this capture, compared with 12 previously. Rejection happens in the headset
+camera model; solver thresholds and cadence are unchanged. Batch conversion
+prefilters the distorted radius so rejected edge blobs do not force an entire
+frame through slow per-blob inversion.
+
+The bounded fixed-45-ms replay retains 1,386/1,177 station support at 90 seconds,
+but initially acquires the mirrored solution and corrects it at 63 seconds.
+With recorded pings and learned timing, it acquires the correct orientation at
+11 seconds but still drops to 17/54 support at 90 seconds. Therefore the radius
+fix alone does **not** resolve the regression.
+
+A local diagnostic replay build, adding logging without changing decisions,
+shows the late collapse occurs when the existing solver's tracking-jump detector
+discards old sightings. In the original factory replay at 88 seconds, a station's
+recent median discrepancy is approximately 1.80 degrees versus 0.72 for older
+sightings, exceeding the unchanged 1-degree jump threshold. This establishes the
+immediate mechanism, not why the recent rays disagree. The measured replay also
+triggers a jump around 41 seconds but does not repeat it near the end.
+
+Regression checks with radius enforcement preserve seated acquisition at 28
+seconds (406/391 support at 50 seconds), and recentered acquisition at 36 and
+57 seconds (354/669 at 70 seconds). All 29 checkerboard comparison views remain
+within bounds and their ray residuals are unchanged. The original table above
+records the earlier unbounded results; it should not be read as results from the
+current converter.
 
 ## Remaining integration work
 

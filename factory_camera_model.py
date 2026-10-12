@@ -18,6 +18,10 @@ def validate_camera(camera):
             raise ValueError('Invalid factory ' + name)
     if np.any(np.asarray(camera['focal_length']) <= 0):
         raise ValueError('Focal lengths must be positive')
+    for name in ('max_valid_distorted_radius', 'max_valid_undistorted_radius'):
+        radius = camera.get(name)
+        if radius is None or not np.isfinite(radius) or radius <= 0:
+            raise ValueError('Missing/invalid factory radius; regenerate inventory: ' + name)
     radial = distorted_radius(np.linspace(0, np.pi/2-1e-7, 4097), camera['distortion_coefficients'])
     if np.any(np.diff(radial) <= 0):
         raise ValueError('Spline must be monotonic over the supported ray domain')
@@ -55,6 +59,8 @@ def lens_rays(camera, pixels):
         raise ValueError('Expected finite Nx2 pixel coordinates')
     xy = (pixels-camera['principal_point'])/camera['focal_length']
     radius = np.linalg.norm(xy, axis=-1)
+    if np.any(radius > camera['max_valid_distorted_radius']):
+        raise ValueError('Pixel outside factory calibrated distortion radius')
     hi = np.full(radius.shape, np.pi/2-1e-7)
     lo = np.zeros(radius.shape)
     if np.any(radius > distorted_radius(hi, camera['distortion_coefficients'])):
@@ -64,7 +70,10 @@ def lens_rays(camera, pixels):
         below = distorted_radius(mid, camera['distortion_coefficients']) < radius
         lo = np.where(below, mid, lo)
         hi = np.where(below, hi, mid)
-    scale = np.divide(np.tan((lo+hi)/2), radius, out=np.ones_like(radius), where=radius>1e-12)
+    undistorted_radius = np.tan((lo+hi)/2)
+    if np.any(undistorted_radius > camera['max_valid_undistorted_radius']):
+        raise ValueError('Ray outside factory calibrated undistorted radius')
+    scale = np.divide(undistorted_radius, radius, out=np.ones_like(radius), where=radius>1e-12)
     xy = xy*scale[..., None] + camera.get('distortion_offset', [0, 0])
     rays = np.concatenate([xy, np.ones((*xy.shape[:-1], 1))], axis=-1)
     return rays/np.linalg.norm(rays, axis=-1, keepdims=True)

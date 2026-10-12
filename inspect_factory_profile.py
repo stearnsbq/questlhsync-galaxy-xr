@@ -57,6 +57,13 @@ def main():
             camera['distortion_model'] = 'unrecognized'
         if 'distortion_offset' in block:
             camera['distortion_offset'] = vector(block, 'distortion_offset', ('x', 'y'))
+        for name in ('max_valid_distorted_radius', 'max_valid_undistorted_radius'):
+            value = field(block, name)
+            if value is not None:
+                radius = float(value)
+                if not math.isfinite(radius) or radius <= 0:
+                    raise ValueError('Invalid factory radius: ' + name)
+                camera[name] = radius
         if 'curved_window' in block:
             camera['curved_window'] = dict(
                 center=vector(block, 'center', ('x', 'y', 'z')),

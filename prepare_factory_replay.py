@@ -85,14 +85,23 @@ def main():
             raise ValueError('Unexpected frame record')
         blobs = []
         ray_batch = None
+        valid_pixels = None
         if count:
             pixels = np.array([[int(values[7+4*j])/10, int(values[8+4*j])/10] for j in range(count)])
+            camera = cams[cam]
+            normalized = (pixels-camera['principal_point'])/camera['focal_length']
+            valid_pixels = np.linalg.norm(normalized, axis=1) <= camera['max_valid_distorted_radius']
             try:
-                _, ray_batch = factory_rays(cams[cam], pixels, args.window != 'none', args.window == 'outer', args.window == 'mid')
+                ray_batch = np.full((count, 3), np.nan)
+                if np.any(valid_pixels):
+                    _, ray_batch[valid_pixels] = factory_rays(camera, pixels[valid_pixels], args.window != 'none', args.window == 'outer', args.window == 'mid')
             except ValueError:
-                pass  # Retry individually so one out-of-domain blob cannot discard the frame.
+                ray_batch = None  # Retry individually so one out-of-domain blob cannot discard the frame.
         for j in range(count):
             x, y, size, peak = map(int, values[7+4*j:11+4*j])
+            if not valid_pixels[j]:
+                rejected += 1
+                continue
             try:
                 if ray_batch is None:
                     _, rays = factory_rays(cams[cam], [[x/10, y/10]], args.window != 'none', args.window == 'outer', args.window == 'mid')
