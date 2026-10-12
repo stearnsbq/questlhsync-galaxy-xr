@@ -55,6 +55,16 @@ def main():
             camera['distortion_coefficients'] = vector(block, 'distortion_fisheye_spline3', tuple('k'+str(i) for i in range(6)))
         else:
             camera['distortion_model'] = 'unrecognized'
+        if 'distortion_offset' in block:
+            camera['distortion_offset'] = vector(block, 'distortion_offset', ('x', 'y'))
+        if 'curved_window' in block:
+            camera['curved_window'] = dict(
+                center=vector(block, 'center', ('x', 'y', 'z')),
+                radius=float(field(block, 'radius')),
+                thickness=float(field(block, 'thickness')),
+                refractive_index=float(field(block, 'refractive_index')))
+        camera['exposure_timestamp_meaning'] = field(block, 'exposure_timestamp_meaning')
+        camera['camera_timestamp_alignment_nanoseconds'] = field(block, 'camera_timestamp_alignment_nanoseconds')
         cameras.append(camera)
     extrinsics = []
     ids = {camera['camera_id'] for camera in cameras}
@@ -70,7 +80,7 @@ def main():
                   source_sha256=hashlib.sha256(raw).hexdigest(),
                   cameras=cameras, camera_extrinsics=extrinsics,
                   unresolved=['Confirm runtime-selected per-device source, not nominal fallback',
-                              'Establish fisheye_spline3 projection definition',
+                              'Establish fisheye_spline3, distortion-offset and curved-window projection definitions',
                               'Establish frame transform to streamed SteamVR HMD origin',
                               'Validate against measured observations before enabling'])
     args.output.parent.mkdir(parents=True, exist_ok=True)

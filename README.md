@@ -64,6 +64,23 @@ the pose frame and requires reacquisition.
 
 ## Calibration and diagnostics
 
+On the supported firmware, boot logs confirm the runtime loads per-device factory
+calibration from `/mnt/vendor/efs/device_profile.textproto`. The profile under
+`/vendor/etc/calibration_service/` is an average-device fallback. Extract the
+factory source without modifying the headset:
+
+```sh
+python read_factory_calibration.py --serial ADB_TRANSPORT
+python inspect_factory_profile.py build/factory-calibration/factory-device-profile.textproto --output build/factory-calibration/inventory.json
+```
+
+The factory tracking models include fisheye spline coefficients, distortion offsets
+and curved-window refraction. These cannot be copied into the existing KB4/Fisheye62
+coefficient fields. Their exact ray model, quaternion convention, and transform to
+the streamed HMD origin still need validation before automatic profiles can be
+enabled. Extraction is working; a calibration-free release is not yet implemented.
+Keep the extracted file private and under the ignored `build/` directory.
+
 Optional image-analysis dependencies:
 
 ```sh
