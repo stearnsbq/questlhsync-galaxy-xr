@@ -10,7 +10,7 @@ changes are limited to headset compatibility; the original solver is unchanged.
 Version 0.3.2 uses per-device factory optics, sensor timestamps converted to
 CLOCK_MONOTONIC, and the protocol's half-pixel coordinate convention. Fresh-profile
 live startup and empty-state replay passed timing learning without jump resets
-on one headset running `I610UEU2AZF3`. See [validation results](docs/live-factory-trial.md#validation).
+on one headset running `I610UEU2AZF3`.
 
 This is a private trial, not a generic calibrated release. Preparation still
 requires a saved runtime head-origin transform. Firmware and QVR libraries are
@@ -35,12 +35,11 @@ Output: `build/QuestLHSync-GXR-0.3.2-diagnostic.zip`. Install through KernelSU
 Manager and reboot. If late root loading prevents automatic startup, use the
 module Action button.
 
-For alignment, follow [factory trial setup](docs/live-factory-trial.md). It
-requires the PC patch supporting **`galaxy_xr_sensor`** and a separate profile
+Alignment requires the PC patch supporting **`galaxy_xr_sensor`** and a separate profile
 such as `galaxy-xr-sensor-trial`. Older PC builds reject the new calibration kind.
-Existing measured profiles remain available for [legacy rollback](docs/measured-profile.md).
+Existing measured profiles remain supported through `build_module.py --profile` for legacy rollback.
 
-## Factory tools
+## Factory trial
 
 ```sh
 python -m pip install -r requirements-factory.txt
@@ -52,6 +51,17 @@ The source is `/mnt/vendor/efs/device_profile.textproto`; the profile under
 `/vendor/etc/calibration_service/` is a nominal fallback and must not replace it.
 Keep extracted profiles, head transforms, recordings, images, maps and vendor
 libraries in ignored local directories. Device-bound trial ZIPs are private.
+
+Save a successful runtime `FRAME_IMU_0_t_SENSOR_THIRD_EYE` transform in
+`build/head-origin.log`, then prepare and build the factory trial:
+
+```sh
+python prepare_factory_trial.py --serial ADB_TRANSPORT --inventory build/factory-calibration/inventory.json --head-origin-log build/head-origin.log --output-dir build/factory-trial
+python build_module.py --serial ADB_TRANSPORT --factory-trial build/factory-trial
+```
+
+Install `build/QuestLHSync-GXR-0.3.2-factory-trial.zip` through KernelSU Manager.
+Regenerate bundles from older versions rather than reusing their timing metadata.
 
 | Tool | Purpose |
 | --- | --- |
@@ -67,20 +77,17 @@ and clock round trips. Factory recordings already contain mapped pixels: replay
 them directly with their exact bundled calibration. The offline converter cannot
 recover sensor timestamps from older delivery-timestamp recordings.
 
-[Model details](docs/factory-calibration.md) describe conventions, developer
-checks and remaining work. Earlier experiments and removed manual-calibration
-tools are retained in Git history.
+Earlier model notes, experiments and removed manual-calibration tools are
+retained in Git history.
 
 ## Repository layout
 
 - `module/`, `src/`, `vendor/questlhsync/`: KernelSU service and native backend.
 - `build_module.py`: diagnostic, factory-trial and legacy measured-profile packaging.
-- `docs/`: current setup, model and validation notes.
-- `integration/`: upstream PC patch, PR description and local installer.
 - `build/`: ignored generated artifacts and private investigation data.
 
-The PC patch targets QuestLHSync 1.14 (`faf2287`). Its scope and validation are
-listed in [the PR description](integration/PR.md).
+The PC compatibility patch is maintained in the separate QuestLHSync checkout
+and targets QuestLHSync 1.14 (`faf2287`).
 
 ## Runtime
 
