@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Existing version tag to publish (for example v0.4.0); leave blank for build only'
+        description: 'Existing version tag to publish (for example v0.4.1); leave blank for build only'
         required: false
         type: string
 
@@ -122,13 +122,12 @@ jobs:
         with:
           name: QuestLHSync-GXR
           path: release
-      - name: Publish private prerelease
+      - name: Publish prerelease
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
         run: |
-          test "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" = true
           test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$SOURCE_SHA"
           (cd release && sha256sum --check SHA256SUMS)
           gh release create "$RELEASE_TAG" release/*.zip release/SHA256SUMS \

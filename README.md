@@ -1,95 +1,62 @@
 # QuestLHSync for Galaxy XR
 
-Experimental KernelSU camera backend for Samsung Galaxy XR (SM-I610), used with
-[QuestLHSync](https://github.com/CreoleVR/QuestLHSync) and Virtual Desktop.
-It supplies blob observations from four outward-facing tracking cameras. PC
-changes are limited to headset compatibility; the original solver is unchanged.
+Experimental KernelSU module that connects Samsung Galaxy XR tracking cameras to
+[QuestLHSync](https://github.com/CreoleVR/QuestLHSync) for Lighthouse alignment
+with Virtual Desktop and SteamVR.
 
-## Current status
+The module uses four outward-facing tracking cameras and prepares calibration
+from the headset's factory data automatically at startup. No manual camera
+calibration is required.
 
-Version 0.4.0 prepares factory calibration automatically on the headset. It reads
-this device's factory camera profile and queries the runtime head-origin transform,
-then generates all four maps locally. Sensor timestamps use CLOCK_MONOTONIC and
-the protocol's half-pixel coordinate convention. No manual calibration is needed.
+## Requirements
 
-This is an experimental prerelease validated on one SM-I610 running
-`I610UEU2AZF3`. Firmware, QVR libraries and the calibration client are pinned.
-Face, eye, depth and color passthrough cameras are not alignment inputs.
+- Samsung Galaxy XR (SM-I610), firmware `I610UEU2AZF3`.
+- KernelSU.
+- Virtual Desktop and SteamVR.
+- A QuestLHSync PC build with Galaxy XR support.
 
-## Install
+Firmware and camera-library compatibility are checked before startup. Other
+firmware versions are currently unsupported. Face, eye, depth and color
+passthrough cameras are not used for alignment.
 
-Download the `automatic.zip` and `SHA256SUMS` from the private GitHub release.
-Install the ZIP through KernelSU Manager and reboot. If late root loading prevents
-automatic startup, use the module Action button. Factory preparation takes a few
-seconds and runs before alignment starts. An unavailable calibration service is
-retried; unsupported or invalid calibration stops setup with a log message.
+## Installation
 
-Use Virtual Desktop/SteamVR with the QuestLHSync PC compatibility build supporting
-**`galaxy_xr_sensor`**, and a separate profile such as `galaxy-xr-sensor-trial`.
-Older PC builds reject this calibration kind. The module does not install the PC
-patch. Other headset support and the original solver are unchanged.
+Download the module ZIP from [Releases](https://github.com/stearnsbq/questlhsync-galaxy-xr/releases),
+install it through KernelSU Manager, and reboot. Use the module's Action button
+if the service does not start automatically.
 
-Calibration is regenerated in private RAM storage on each service start. No
-headset calibration or proprietary library is included in the release ZIP.
+The module prepares calibration on the headset before starting the camera
+service. The compatible QuestLHSync PC driver must be installed separately.
 
-## Build
+## Building
 
-Install Python 3, Zig 0.16.0 and Clang/LLD. With a supported headset connected over
-ADB and KernelSU root available through `su`:
+Requires Python 3, Zig 0.16.0, and Clang/LLD. Build with Android NDK arm64 API 29
+link libraries:
 
 ```sh
-python build_module.py --serial ADB_TRANSPORT
+python build_module.py --bionic-dir /path/to/ndk/toolchains/llvm/prebuilt/HOST/sysroot/usr/lib/aarch64-linux-android/29
 ```
 
-Output: `build/QuestLHSync-GXR-0.4.0-automatic.zip`.
-The build validates firmware and QVR hashes and saves local bionic link inputs
-under `build/bionic`. These vendor libraries are never packaged. Offline builds
-can use `--bionic-dir build/bionic`, or point it at the Android NDK's
-`toolchains/llvm/prebuilt/HOST/sysroot/usr/lib/aarch64-linux-android/29` directory.
-Add `--diagnostic` for a module with alignment and automatic setup disabled.
+Alternatively, use `--serial ADB_TRANSPORT` to obtain link libraries from a
+connected supported headset. Output ZIPs are written to `build/`. Add
+`--diagnostic` to build without automatic calibration or alignment.
 
-## GitHub Actions
+GitHub Actions builds the module on pushes, pull requests and manual runs.
+Version-tag builds publish prereleases. To publish an existing tag manually,
+run the workflow with `release_tag` set to that tag; leave it blank for a build
+only. Releases include a ZIP and SHA256 checksum.
 
-The `Build module` workflow runs on pushes, pull requests and manual dispatch.
-The `QuestLHSync-GXR` artifact contains the automatic ZIP and its SHA256 checksum.
-It uses Zig 0.16.0 and Android NDK r27d's API 29 link stubs, without a headset.
-Pushing a matching version tag (for example `v0.4.0`) publishes the verified
-artifact as a prerelease in the private repository. Tags must match both the
-builder and module metadata; calibration data is never uploaded.
+## Service
 
-To publish an existing tag manually, select **Actions → Build module → Run
-workflow**, use the `main` branch, and enter `v0.4.0` in **Release tag**. The
-workflow builds that tag's source and publishes its artifact after verification.
-Leaving the field blank runs a build only. Branch pushes and pull requests also
-build only, so their release job is expected to be skipped.
+The service uses TCP port 47280 and UDP port 47281 for discovery. It sends
+tracking observations rather than camera images. The LAN service is
+unauthenticated and should be used on a trusted network.
 
-## Repository layout
+Logs are available at `/dev/questlhsync-gxr/service.log`. Disabling or removing
+the module stops the service. Calibration is generated locally and is not
+included in distributed packages.
 
-- `module/`, `src/`, `vendor/questlhsync/`: KernelSU service and native backend.
-- `build_module.py`: automatic, diagnostic, factory-trial and legacy measured-profile packaging.
-- `build/`: ignored generated artifacts and private investigation data.
+## License
 
-The PC compatibility patch is maintained in the separate QuestLHSync checkout
-and targets QuestLHSync 1.14 (`faf2287`).
-
-## Runtime
-
-Firmware and library guards run before camera access. The reader copies and
-releases QVR buffers before analysis. It does not change exposure settings,
-camera configuration, SELinux policy or vendor overlays. The daemon uses static
-musl; the camera reader runs separately with Android bionic.
-
-TCP 47280 serves clients and UDP 47281 provides discovery. As upstream, the LAN
-service is unauthenticated and sends blob metadata rather than images. Clients
-must send regular `P` heartbeats. Capture stops after the last client's idle
-grace period. Do not run two daemons on the same ports.
-
-Logs: `/dev/questlhsync-gxr/service.log`. The random discovery UUID persists in
-`/data/adb/questlhsync-gxr/id`; it is not the hardware serial. Disabling/removing
-the module stops its service; uninstall retains the UUID.
-
-## Attribution
-
-MIT licensed. The vendored daemon/interface and adapted detector originate from
-QuestLHSync 1.14 by CreoleVR; see [vendor provenance](vendor/questlhsync/README.md).
-No proprietary libraries, firmware or personal calibration data are distributed.
+MIT licensed. Includes code from QuestLHSync by CreoleVR; see
+[vendor provenance](vendor/questlhsync/README.md).
