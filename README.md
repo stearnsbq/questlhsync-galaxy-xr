@@ -76,9 +76,12 @@ python inspect_factory_profile.py build/factory-calibration/factory-device-profi
 
 The factory tracking models include fisheye spline coefficients, distortion offsets
 and curved-window refraction. These cannot be copied into the existing KB4/Fisheye62
-coefficient fields. Their exact ray model, quaternion convention, and transform to
-the streamed HMD origin still need validation before automatic profiles can be
-enabled. Extraction is working; a calibration-free release is not yet implemented.
+coefficient fields. Experimental factory-ray conversion now acquires alignment in
+saved seated, standing and recentering recordings with the existing solver.
+Automatic startup calibration and live factory-ray conversion are not implemented;
+the working module still uses its measured profile. See
+[factory calibration investigation](docs/factory-calibration.md) for reproducible
+commands, model assumptions and remaining work.
 Keep the extracted file private and under the ignored `build/` directory.
 
 Optional image-analysis dependencies:
@@ -98,6 +101,11 @@ python -m pip install -r requirements-calibration.txt
   tracking-camera intrinsics and extrinsics from a saved device-profile textproto.
   This does not convert distortion models or enable alignment. The runtime-selected
   per-device source and its coordinate-frame conventions still require validation.
+- `evaluate_factory_calibration.py`: compare fixed factory geometry with saved
+  checkerboard observations, fitting only board poses.
+- `prepare_factory_replay.py`: remap recorded raw blobs using factory optics for
+  offline replay. Its generated calibration **must not be installed** with the
+  live raw-pixel reader.
 - `build_pose_recorder.cmd PATH_TO_QUESTLHSYNC`: build the Windows pose recorder
   using Visual Studio and OpenVR files from a QuestLHSync checkout. Run the
   resulting executable from `build/` while SteamVR is open.
