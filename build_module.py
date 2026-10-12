@@ -15,7 +15,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE
 FINGERPRINT = 'samsung/xrvst2ue/xrvst2:14/UML2.260301.001/I610UEU2AZF3:user/release-keys'
 LIB_HASH = 'cd34ddf44087a764d67f654b2be77f31fad74fedf164c39193ff5af1f6a62a94'
-VERSION = '0.3.2'
+VERSION = '0.4.0'
 
 
 def validate_calibration(cal):
@@ -127,6 +127,7 @@ def main():
     ap.add_argument('--serial', help='ADB transport serial for local bionic link libraries')
     ap.add_argument('--bionic-dir', type=Path, help='Directory containing arm64 device or Android NDK libc.so/libdl.so link inputs')
     mode = ap.add_mutually_exclusive_group()
+    mode.add_argument('--diagnostic', action='store_true', help='Disable automatic factory setup and alignment')
     mode.add_argument('--profile', type=Path, help='Verified measured per-device profile')
     mode.add_argument('--factory-trial', type=Path, help='Private bundle from prepare_factory_trial.py')
     args = ap.parse_args()
@@ -160,15 +161,22 @@ def main():
          '-DHS_TIMER_CLOCK=CLOCK_BOOTTIME', '-DHS_LOG_CAPTURE_STATUS=1',
          '-I'+str(ROOT/'vendor/questlhsync'), str(ROOT/'vendor/questlhsync/lhsyncd.c'), str(HERE/'src/gxr.c'),
          '-o', str(out/'lhsyncd')], env=env)
-    run(['clang', '--target=aarch64-linux-android29', '-fuse-ld=lld', '-nostdlib',
-         '-fPIE', '-pie', '-O2', '-Wall', '-Wextra', '-Werror', '-fno-stack-protector',
-         '-Wl,-e,_start', '-Wl,--dynamic-linker=/system/bin/linker64', '-Wl,-z,max-page-size=16384',
-         str(HERE/'src/start.S'), str(HERE/'src/capture.c'), str(bionic/'libc.so'), str(bionic/'libdl.so'),
-         '-o', str(out/'gxr-lhsight')])
+    run(['zig', 'cc', '-target', 'aarch64-linux-musl', '-static', '-O2', '-Wall', '-Wextra',
+         '-Werror', '-ffp-contract=off', str(HERE/'src/prepare.c'), '-lm',
+         '-o', str(out/'gxr-prepare')], env=env)
+    for source, binary in (('capture.c', 'gxr-lhsight'), ('head_origin.c', 'gxr-head-origin')):
+        run(['clang', '--target=aarch64-linux-android29', '-fuse-ld=lld', '-nostdlib',
+             '-fPIE', '-pie', '-O2', '-Wall', '-Wextra', '-Werror', '-fno-stack-protector',
+             '-Wl,-e,_start', '-Wl,--dynamic-linker=/system/bin/linker64', '-Wl,-z,max-page-size=16384',
+             str(HERE/'src/start.S'), str(HERE/'src'/source), str(bionic/'libc.so'), str(bionic/'libdl.so'),
+             '-o', str(out/binary)])
     files = {p.name: p.read_bytes().replace(b'\r\n', b'\n') for p in (HERE/'module').iterdir() if p.is_file()}
-    files.update({name: (out/name).read_bytes() for name in ('lhsyncd', 'gxr-lhsight')})
+    binaries = ('lhsyncd', 'gxr-lhsight', 'gxr-head-origin', 'gxr-prepare')
+    files.update({name: (out/name).read_bytes() for name in binaries})
     files['LICENSE'] = (ROOT/'LICENSE').read_bytes()
     files['README.md'] = (HERE/'README.md').read_bytes()
+    if not args.diagnostic and not profile and not factory_files:
+        files['automatic-setup'] = b'1\n'
     if profile:
         p, cal = profile
         files['calibration.json'] = cal
@@ -186,14 +194,14 @@ def main():
     for p in stage.iterdir():
         if p.is_file() and p.name not in files:
             p.unlink()
-    variant = 'factory-trial' if factory_files else 'trial' if profile else 'diagnostic'
+    variant = 'factory-trial' if factory_files else 'trial' if profile else 'diagnostic' if args.diagnostic else 'automatic'
     zip_path = out / ('QuestLHSync-GXR-'+VERSION+'-'+variant+'.zip')
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as z:
         for name, data in sorted(files.items()):
             (stage/name).write_bytes(data)
             info = zipfile.ZipInfo(name, (2026, 10, 12, 0, 0, 0))
             info.create_system = 3
-            mode = 0o755 if name.endswith('.sh') or name in ('lhsyncd', 'gxr-lhsight') else 0o644
+            mode = 0o755 if name.endswith('.sh') or name in binaries else 0o644
             info.external_attr = (0o100000 | mode) << 16
             info.compress_type = zipfile.ZIP_DEFLATED
             z.writestr(info, data)

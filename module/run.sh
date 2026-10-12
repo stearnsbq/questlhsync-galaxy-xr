@@ -7,6 +7,7 @@ export QLHS_FW=$(getprop ro.build.version.incremental)
 export QLHS_CALIBRATED=0
 unset QLHS_FACTORY_MAP
 unset QLHS_SENSOR_TIME
+unset QLHS_CALIBRATION_DIR
 if [ -f "$MODDIR/profile.sha256" ]; then
   (cd "$MODDIR" && sha256sum -c profile.sha256) >&2 || exit 2
   ACTUAL=$(getprop ro.serialno | tr -d '\r\n' | sha256sum | cut -d ' ' -f 1)
@@ -26,5 +27,12 @@ if [ -f "$MODDIR/profile.sha256" ]; then
     echo 'Factory map without trial manifest; capture refused' >&2
     exit 2
   fi
+elif [ -f "$MODDIR/automatic-setup" ]; then
+  sh "$MODDIR/prepare.sh" || exit $?
+  export QLHS_CALIBRATION_DIR=/dev/questlhsync-gxr/calibration
+  export QLHS_FACTORY_MAP="$QLHS_CALIBRATION_DIR/factory-map.bin"
+  export QLHS_SENSOR_TIME=1
+  export QLHS_MAX_EXPOSURE_NS=3000000
+  export QLHS_CALIBRATED=1
 fi
 exec "$MODDIR/lhsyncd" "$MODDIR"

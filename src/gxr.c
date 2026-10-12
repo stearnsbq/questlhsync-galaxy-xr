@@ -37,7 +37,8 @@ int hs_calibration(char **data, size_t *len, char *name, size_t n) {
     return -1;
   }
   char path[1024];
-  snprintf(path, sizeof path, "%s/calibration.json", moddir);
+  const char *caldir = getenv("QLHS_CALIBRATION_DIR");
+  snprintf(path, sizeof path, "%s/calibration.json", caldir ? caldir : moddir);
   FILE *f = fopen(path, "rb");
   if (!f) goto bad;
   if (fseek(f, 0, SEEK_END)) { fclose(f); goto bad; }
@@ -49,7 +50,7 @@ int hs_calibration(char **data, size_t *len, char *name, size_t n) {
   fclose(f);
   if (got != (size_t)size) { free(buf); goto bad; }
   *data = buf; *len = got;
-  snprintf(name, n, "gxr/%s", getenv("QLHS_FACTORY_MAP") ? "factory-trial.json" : "measured-trial-profile.json");
+  snprintf(name, n, "gxr/%s", caldir ? "automatic-factory" : getenv("QLHS_FACTORY_MAP") ? "factory-trial.json" : "measured-trial-profile.json");
   return 0;
 bad:
   snprintf(name, n, "GXR calibration unavailable; capture refused");
@@ -78,7 +79,7 @@ pid_t hs_capture_start(int out_fd, char *msg, size_t n) {
     _exit(127);
   }
   snprintf(msg, n, "GXR tracking + ctrl-tracking; %s; %s CLOCK_MONOTONIC timestamps",
-           calibrated() ? (getenv("QLHS_FACTORY_MAP") ? "factory trial enabled" : "measured trial profile enabled") : "diagnostics only (no C/F alignment records)",
+           calibrated() ? (getenv("QLHS_FACTORY_MAP") ? "factory calibration enabled" : "measured trial profile enabled") : "diagnostics only (no C/F alignment records)",
            getenv("QLHS_SENSOR_TIME") ? "sensor" : "arrival");
   return pid;
 }

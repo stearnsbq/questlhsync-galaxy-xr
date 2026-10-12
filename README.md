@@ -7,48 +7,60 @@ changes are limited to headset compatibility; the original solver is unchanged.
 
 ## Current status
 
-Version 0.3.2 uses per-device factory optics, sensor timestamps converted to
-CLOCK_MONOTONIC, and the protocol's half-pixel coordinate convention. Fresh-profile
-live startup and empty-state replay passed timing learning without jump resets
-on one headset running `I610UEU2AZF3`.
+Version 0.4.0 prepares factory calibration automatically on the headset. It reads
+this device's factory camera profile and queries the runtime head-origin transform,
+then generates all four maps locally. Sensor timestamps use CLOCK_MONOTONIC and
+the protocol's half-pixel coordinate convention. No manual calibration is needed.
 
-This is a private trial, not a generic calibrated release. Preparation still
-requires a saved runtime head-origin transform. Firmware and QVR libraries are
-pinned. Face, eye, depth and color passthrough cameras are not alignment inputs.
+This is an experimental prerelease validated on one SM-I610 running
+`I610UEU2AZF3`. Firmware, QVR libraries and the calibration client are pinned.
+Face, eye, depth and color passthrough cameras are not alignment inputs.
 
-## Build and install
+## Install
 
-Install Python 3, Zig (tested with 0.16.0), Clang/LLD and ADB. Connect the supported
-headset with KernelSU root available through `su`.
+Download the `automatic.zip` and `SHA256SUMS` from the private GitHub release.
+Install the ZIP through KernelSU Manager and reboot. If late root loading prevents
+automatic startup, use the module Action button. Factory preparation takes a few
+seconds and runs before alignment starts. An unavailable calibration service is
+retried; unsupported or invalid calibration stops setup with a log message.
 
-For a **diagnostic-only** module (no calibration or alignment frames):
+Use Virtual Desktop/SteamVR with the QuestLHSync PC compatibility build supporting
+**`galaxy_xr_sensor`**, and a separate profile such as `galaxy-xr-sensor-trial`.
+Older PC builds reject this calibration kind. The module does not install the PC
+patch. Other headset support and the original solver are unchanged.
+
+Calibration is regenerated in private RAM storage on each service start. No
+headset calibration or proprietary library is included in the release ZIP.
+
+## Build
+
+Install Python 3, Zig 0.16.0 and Clang/LLD. With a supported headset connected over
+ADB and KernelSU root available through `su`:
 
 ```sh
 python build_module.py --serial ADB_TRANSPORT
 ```
 
+Output: `build/QuestLHSync-GXR-0.4.0-automatic.zip`.
 The build validates firmware and QVR hashes and saves local bionic link inputs
-under `build/bionic`. These vendor libraries are never packaged. Subsequent
-offline builds can use `--bionic-dir build/bionic`.
-
-Output: `build/QuestLHSync-GXR-0.3.2-diagnostic.zip`. Install through KernelSU
-Manager and reboot. If late root loading prevents automatic startup, use the
-module Action button.
-
-Alignment requires the PC patch supporting **`galaxy_xr_sensor`** and a separate profile
-such as `galaxy-xr-sensor-trial`. Older PC builds reject the new calibration kind.
-Existing measured profiles remain supported through `build_module.py --profile` for legacy rollback.
+under `build/bionic`. These vendor libraries are never packaged. Offline builds
+can use `--bionic-dir build/bionic`, or point it at the Android NDK's
+`toolchains/llvm/prebuilt/HOST/sysroot/usr/lib/aarch64-linux-android/29` directory.
+Add `--diagnostic` for a module with alignment and automatic setup disabled.
 
 ## GitHub Actions
 
 The `Build module` workflow runs on pushes, pull requests and manual dispatch.
-Download `QuestLHSync-GXR-diagnostic` from the run's artifacts for the installable
-ZIP and its SHA256 checksum. It builds with Zig 0.16.0 and Android NDK r27d's
-API 29 link stubs, without a connected headset or proprietary link inputs.
-The artifact contains diagnostic mode only; calibrated alignment still requires
-the private factory preparation below. CI does not upload device data.
+The `QuestLHSync-GXR` artifact contains the automatic ZIP and its SHA256 checksum.
+It uses Zig 0.16.0 and Android NDK r27d's API 29 link stubs, without a headset.
+Pushing a matching version tag (for example `v0.4.0`) publishes the verified
+artifact as a prerelease in the private repository. Tags must match both the
+builder and module metadata; calibration data is never uploaded.
 
-## Factory trial
+## Developer factory trial (optional)
+
+The host helpers remain available for investigating optics and reproducing maps.
+Ordinary installation uses automatic setup above.
 
 ```sh
 python -m pip install -r requirements-factory.txt
@@ -69,7 +81,7 @@ python prepare_factory_trial.py --serial ADB_TRANSPORT --inventory build/factory
 python build_module.py --serial ADB_TRANSPORT --factory-trial build/factory-trial
 ```
 
-Install `build/QuestLHSync-GXR-0.3.2-factory-trial.zip` through KernelSU Manager.
+Install `build/QuestLHSync-GXR-0.4.0-factory-trial.zip` through KernelSU Manager.
 Regenerate bundles from older versions rather than reusing their timing metadata.
 
 | Tool | Purpose |
@@ -89,7 +101,7 @@ retained in Git history.
 ## Repository layout
 
 - `module/`, `src/`, `vendor/questlhsync/`: KernelSU service and native backend.
-- `build_module.py`: diagnostic, factory-trial and legacy measured-profile packaging.
+- `build_module.py`: automatic, diagnostic, factory-trial and legacy measured-profile packaging.
 - `build/`: ignored generated artifacts and private investigation data.
 
 The PC compatibility patch is maintained in the separate QuestLHSync checkout

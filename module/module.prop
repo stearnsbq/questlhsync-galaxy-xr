@@ -1,6 +1,6 @@
 id=questlhsync_gxr
 name=QuestLHSync for Galaxy XR (experimental)
-version=0.3.2
-versionCode=5
+version=0.4.0
+versionCode=6
 author=QuestLHSync contributors
-description=Native QVR tracking-camera service. Diagnostics by default; measured profiles and private factory-map trials supported. SM-I610 AZF3 only.
+description=Automatic per-headset factory calibration for QuestLHSync tracking cameras. Requires the Galaxy XR compatible PC driver. SM-I610 AZF3 only.

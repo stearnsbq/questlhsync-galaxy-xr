@@ -10,7 +10,8 @@ sleep 2
 PID=$(cat /dev/questlhsync-gxr/daemon.pid 2>/dev/null)
 case "$PID" in ''|*[!0-9]*) echo 'Service did not start; inspect /dev/questlhsync-gxr/service.log'; exit 1;; esac
 if kill -0 "$PID" 2>/dev/null; then
-  echo 'QuestLHSync Galaxy XR service is running.'
+  echo 'QuestLHSync Galaxy XR service is starting or running.'
+  echo 'Automatic factory setup may take a few seconds; see /dev/questlhsync-gxr/service.log.'
 else
   echo 'Service exited; inspect /dev/questlhsync-gxr/service.log'
   exit 1
