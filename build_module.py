@@ -129,7 +129,7 @@ def main():
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument('--diagnostic', action='store_true', help='Disable automatic factory setup and alignment')
     mode.add_argument('--profile', type=Path, help='Verified measured per-device profile')
-    mode.add_argument('--factory-trial', type=Path, help='Private bundle from prepare_factory_trial.py')
+    mode.add_argument('--factory-trial', type=Path, help='Existing private factory-trial bundle (legacy)')
     args = ap.parse_args()
     out = HERE / 'build'
     out.mkdir(exist_ok=True)

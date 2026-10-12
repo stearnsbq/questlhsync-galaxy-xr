@@ -1,5 +1,6 @@
-/* Native factory map preparation. Mirrors factory_camera_model.py; no fitting,
-   vendor modifications, or device-specific constants. Static musl executable. */
+/* Native factory map preparation using the validated spline and curved-window
+   model. No fitting, vendor modifications, or device-specific constants.
+   Static musl executable. */
 #include <ctype.h>
 #include <errno.h>
 #include <math.h>

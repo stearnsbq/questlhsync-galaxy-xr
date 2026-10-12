@@ -57,47 +57,6 @@ Pushing a matching version tag (for example `v0.4.0`) publishes the verified
 artifact as a prerelease in the private repository. Tags must match both the
 builder and module metadata; calibration data is never uploaded.
 
-## Developer factory trial (optional)
-
-The host helpers remain available for investigating optics and reproducing maps.
-Ordinary installation uses automatic setup above.
-
-```sh
-python -m pip install -r requirements-factory.txt
-python read_factory_calibration.py --serial ADB_TRANSPORT
-python inspect_factory_profile.py build/factory-calibration/factory-device-profile.textproto --output build/factory-calibration/inventory.json
-```
-
-The source is `/mnt/vendor/efs/device_profile.textproto`; the profile under
-`/vendor/etc/calibration_service/` is a nominal fallback and must not replace it.
-Keep extracted profiles, head transforms, recordings, images, maps and vendor
-libraries in ignored local directories. Device-bound trial ZIPs are private.
-
-Save a successful runtime `FRAME_IMU_0_t_SENSOR_THIRD_EYE` transform in
-`build/head-origin.log`, then prepare and build the factory trial:
-
-```sh
-python prepare_factory_trial.py --serial ADB_TRANSPORT --inventory build/factory-calibration/inventory.json --head-origin-log build/head-origin.log --output-dir build/factory-trial
-python build_module.py --serial ADB_TRANSPORT --factory-trial build/factory-trial
-```
-
-Install `build/QuestLHSync-GXR-0.4.0-factory-trial.zip` through KernelSU Manager.
-Regenerate bundles from older versions rather than reusing their timing metadata.
-
-| Tool | Purpose |
-| --- | --- |
-| `read_factory_calibration.py` | Read the firmware-pinned factory source. |
-| `inspect_factory_profile.py` | Extract four camera models and their validity limits. |
-| `prepare_factory_trial.py` | Build a guarded private factory-map bundle. |
-| `factory_camera_model.py` | Shared spline and curved-window model. |
-
-Record sessions through the QuestLHSync dashboard to include poses, controllers
-and clock round trips. Factory recordings already contain mapped pixels: replay
-them directly with their exact bundled calibration.
-
-Earlier model notes, experiments and removed manual-calibration tools are
-retained in Git history.
-
 ## Repository layout
 
 - `module/`, `src/`, `vendor/questlhsync/`: KernelSU service and native backend.
