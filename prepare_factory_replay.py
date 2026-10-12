@@ -4,6 +4,8 @@ Consumes a native QuestLHSync recording, factory inventory and runtime third-eye
 log. Rewrites blob coordinates into an ideal equidistant camera. This output is
 NOT compatible with an unchanged live reader: it must never be installed as a
 calibration profile for raw camera pixels.
+This remaps pixels only: it cannot recover sensor timestamps from an arrival-only
+recording and therefore keeps the legacy galaxy_xr timestamp declaration.
 """
 import argparse
 import hashlib
@@ -97,7 +99,7 @@ def main():
         ray_batch = None
         valid_pixels = None
         if count:
-            pixels = np.array([[int(values[7+4*j])/10, int(values[8+4*j])/10] for j in range(count)])
+            pixels = np.array([[int(values[7+4*j])/10-.5, int(values[8+4*j])/10-.5] for j in range(count)])
             camera = cams[cam]
             normalized = (pixels-camera['principal_point'])/camera['focal_length']
             valid_pixels = np.linalg.norm(normalized, axis=1) <= camera['max_valid_distorted_radius']
@@ -114,7 +116,7 @@ def main():
                 continue
             try:
                 if ray_batch is None:
-                    rays = convert(cams[cam], [[x/10, y/10]])
+                    rays = convert(cams[cam], [[x/10-.5, y/10-.5]])
                     ray = rays[0]
                 else:
                     ray = ray_batch[j]
@@ -130,7 +132,11 @@ def main():
             if np.any(xy < 0) or np.any(xy >= 640):
                 rejected += 1
                 continue
-            blobs.extend([round(xy[0]*10), round(xy[1]*10), size, peak])
+            wire_x, wire_y = round(xy[0]*10)+5, round(xy[1]*10)+5
+            if not (0 <= wire_x < 6400 and 0 <= wire_y < 6400):
+                rejected += 1
+                continue
+            blobs.extend([wire_x, wire_y, size, peak])
             accepted += 1
         lines.append(f'{values[0]} F {cam} {seq} {ts} {mean} {len(blobs)//4} '+ ' '.join(map(str, blobs)))
         frames += 1
@@ -146,7 +152,8 @@ def main():
                       for name, path in [('recording', args.recording), ('inventory', args.inventory),
                                          ('head_origin_log', args.head_origin_log)]},
         limitations=['Head transform inferred from runtime log; API still needed for generic startup',
-                     'Curved-window model is experimental; exit points discarded in this far-field replay',
+                     'Pixel remapping preserves original timestamps; sensor times cannot be recovered',
+                     'Physical window modes discard exit origins; native uses the central reference-plane model',
                      'Virtual camera bounds do not exactly reproduce original sensor visibility']), indent=2))
     print('Remapped', frames, 'frames;', accepted, 'blobs;', rejected, 'rejected')
 

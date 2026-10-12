@@ -208,6 +208,21 @@ tracking jumps. Initial station-mirror ambiguity remains in some recordings,
 including the seated ping-based replay both before and after this correction.
 The PC solver and all acquisition, exposure and timing thresholds are unchanged.
 
+### Sensor timestamps and coordinate convention (0.3.2)
+
+The follow-up cold-start investigation found that a better initial timing guess
+alone was insufficient. The native reader now preserves QVR sensor timestamps,
+converting BOOTTIME to the daemon's MONOTONIC timebase on every frame, and applies
+the wire format's half-pixel convention around optical-map lookup. A distinct
+`galaxy_xr_sensor` calibration kind selects the existing PC sensor-time path and
+is rejected by older compatibility drivers.
+
+Fresh-profile live startup and empty-state replay both passed the timing-learning
+transition without a jump reset. See [the 0.3.2 results](live-factory-trial.md)
+for frame counts, timing, support, bounds and limitations. Historical 0.3.0/0.3.1
+replay results above describe delivery timestamps and the former coordinate
+convention; they are retained as investigation history, not current validation.
+
 ## Remaining integration work
 
 - Obtain the current head-origin transform reliably through the calibration

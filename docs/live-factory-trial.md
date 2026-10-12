@@ -1,4 +1,4 @@
-# Private live factory trial (0.3.1)
+# Private live factory trial (0.3.2)
 
 This trial converts blob coordinates inside the Galaxy XR reader. It uses the
 factory spline, distortion offset, cover-window central projection and validity
@@ -22,7 +22,7 @@ python prepare_factory_trial.py --serial ADB_TRANSPORT --inventory build/factory
 python build_module.py --bionic-dir build/bionic --factory-trial build/factory-trial
 ```
 
-Output: `build/QuestLHSync-GXR-0.3.1-factory-trial.zip`. This ZIP contains private,
+Output: `build/QuestLHSync-GXR-0.3.2-factory-trial.zip`. This ZIP contains private,
 device-bound derived calibration. Do not publish it as a generic release.
 `--factory-trial` and the existing measured `--profile` option are mutually
 exclusive. A build without either option remains diagnostic.
@@ -33,16 +33,29 @@ manifest and current source/serial before capture. The native reader rejects a
 bad map header, wrong dimensions, truncated/trailing data and invalid coordinates.
 No missing-data fallback to guessed optics is provided.
 
-Regenerate maps for 0.3.1: the builder rejects older bundles without
+Regenerate bundles for 0.3.2: the builder rejects older bundles without
 `projection_model: window-plane-1m-lut1000`. The midpoint glass surfaces feed
 a central projection onto a plane one metre along the window axis, with the
 firmware's 1,000-entry correction lookup. Using the outgoing physical direction
 alone, as in 0.3.0, is a different camera model.
 
+The manifest also requires `frame_timestamp: sensor-boottime-to-monotonic` and
+`pixel_centres: wire-half-pixel`. The calibration kind is `galaxy_xr_sensor`,
+which older PC compatibility drivers reject instead of misinterpreting timestamps.
+
 Maps use little-endian float pairs and bilinear interpolation. Invalid corners
-reject the blob conservatively. The existing 3 ms exposure limit, detector,
-timestamps, blob size and peak brightness remain unchanged. No exposure control
+reject the blob conservatively. Detector coordinates have centres at `n + 0.5`;
+conversion subtracts 0.5 before lookup and adds it back for the wire format.
+The existing 3 ms exposure limit, detector, blob size and peak brightness remain
+unchanged. No exposure control
 or vendor service changes are made.
+
+The factory reader converts QVR sensor BOOTTIME to CLOCK_MONOTONIC per frame,
+bracketing the clock sample to limit uncertainty to 0.1 ms. Missing, future,
+over-one-second-old or non-increasing converted timestamps stop capture. It never
+silently substitutes delivery times. Recomputing the clock offset handles suspend.
+The PC selects its existing sensor-timestamp path, without altering the solver
+or timing estimator. Measured-profile and diagnostic modes retain delivery times.
 
 ## Install and check
 
@@ -50,10 +63,13 @@ Install the private ZIP through KernelSU Manager and reboot, or use a reviewed
 development deployment while the service is stopped. Preserve the measured ZIP
 and a backup of the installed module before replacing it.
 
-Close SteamVR before updating the PC compatibility DLL. The optional
+Close SteamVR before updating the PC compatibility DLL. Version 0.3.2 requires
+the PC compatibility build supporting `galaxy_xr_sensor`. The optional
 `integration/install-pc-trial.ps1` accepts `-Driver`, `-ExpectedSha256` and
 `-BackupDirectory`; it saves the old DLL and QuestLHSync settings, then selects
-the separate `galaxy-xr-factory-trial` profile. With the same backup directory,
+the separate `galaxy-xr-factory-trial` profile by default. Pass
+`-Profile galaxy-xr-sensor-trial` for 0.3.2; do not inherit saved delivery-time
+estimates. With the same backup directory,
 `-Rollback` restores the old DLL and driver settings. It does not restore the
 headset module; reinstall the measured-profile ZIP as well. No other SteamVR
 settings are intentionally changed.
@@ -120,3 +136,39 @@ at 65 seconds and triggers a support reset near 70 seconds, ending at 71/75.
 This remains a cold-start timing limitation: the live pass and the corrected
 original regression do not establish reliable startup without learned timing.
 No timing override or upstream solver modification was introduced to conceal it.
+
+## Sensor timestamp and pixel-centre correction (0.3.2)
+
+Changing only the initial timing estimate did not resolve the retained cold-start
+case and was not shipped. Investigation found that the backend was discarding
+available sensor stamps, and its optical map was interpreting the detector's
+`n + 0.5` coordinates as integer-centred pixels. Version 0.3.2 corrects both
+backend contracts. The PC change only recognizes the sensor-stamped calibration
+kind and selects the existing sensor-time path; no solver code, thresholds,
+forced timing estimate or learned-timing override is changed.
+
+A native clock probe on the headset, including its approximately 96-second
+accumulated suspend offset, produced frames from all four cameras and closed
+with zero errors. The revised C map accepted 50,785 of 53,023 raw blobs and
+agreed with the corrected analytical coordinates within 0.071 pixels including
+wire rounding. Legacy delivery-timestamp replay decisions were identical with
+the old and new PC builds, and the older build rejected the new calibration kind.
+
+The installed PC build used a new `galaxy-xr-sensor-trial` profile with no saved
+timing or stations. It acquired approximately 20 seconds after connection and
+learned timing one second later. A subsequent 90.47-second recording contained
+7,356 converted frames, exactly 1,839 per camera, and no error records or live
+jump events. All 18 status samples remained locked. Residuals ranged from
+0.277 to 0.341 degrees; median round trip was 4.00 ms, with a 15.79 ms sampled
+peak. Final stop status had 3,372/2,873 station support.
+
+Replaying that recording from empty state and the unmodified 18 ms default
+acquired at 8 seconds, learned 32.1 ms at 25 seconds, and ended at 2,851/2,343
+support with 0.288-degree median residual. A diagnostic build that only logs
+the existing jump decision confirmed zero replay jump events. No saved timing
+was supplied to this check. The earlier arrival-only recordings cannot recreate
+these sensor stamps; changing their calibration kind would be an invalid test.
+
+These checks validate this headset and firmware through a fresh startup and
+timing-learning transition. Automatic factory preparation and additional-device
+coverage remain separate requirements for a generic release.

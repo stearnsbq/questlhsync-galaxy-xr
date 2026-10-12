@@ -35,7 +35,7 @@ in the ZIP or this repository. For subsequent offline builds:
 python build_module.py --bionic-dir build/bionic
 ```
 
-The output is `build/QuestLHSync-GXR-0.3.1-diagnostic.zip`. Install it with
+The output is `build/QuestLHSync-GXR-0.3.2-diagnostic.zip`. Install it with
 KernelSU Manager and reboot. The module Action button can start an already
 installed service if this device's KernelSU setup did not start it during boot.
 Automatic startup on custom late-loading root configurations remains limited.
@@ -65,6 +65,10 @@ Native conversion uses a device-bound pixel map. Version 0.3.1 corrects the
 curved-window central projection and avoids the late support collapse in the
 retained regression replay. Automatic startup calibration remains unimplemented;
 the private trial still requires a saved runtime head-origin transform.
+Version 0.3.2 additionally preserves pixel-centre coordinates through the map
+and reports QVR sensor timestamps converted to the daemon's MONOTONIC clock.
+It requires the PC patch supporting `galaxy_xr_sensor`; use a separate profile
+so delivery-time timing estimates are not reused with sensor timestamps.
 See
 [factory calibration investigation](docs/factory-calibration.md) for reproducible
 commands, model assumptions and remaining work.

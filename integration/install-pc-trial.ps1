@@ -2,9 +2,11 @@ param(
     [string]$Driver,
     [string]$ExpectedSha256,
     [string]$BackupDirectory,
+    [string]$Profile = 'galaxy-xr-factory-trial',
     [switch]$Rollback
 )
 $ErrorActionPreference = 'Stop'
+if ($Profile -notmatch '^[A-Za-z0-9_-]+$') { throw 'Invalid QuestLHSync profile name.' }
 if (Get-Process vrserver -ErrorAction SilentlyContinue) { throw 'Close SteamVR before updating the driver.' }
 if (!$BackupDirectory) { throw 'Specify a private backup directory.' }
 $backup = [IO.Path]::GetFullPath($BackupDirectory)
@@ -37,7 +39,7 @@ if ($Rollback) {
     }
     Copy-Item -LiteralPath $Driver -Destination $target -Force
     if (!$settings.driver_questlhsync) { $settings | Add-Member -NotePropertyName driver_questlhsync -NotePropertyValue ([pscustomobject]@{}) }
-    foreach ($item in @{enable=$true; anyHmd=$true; profile='galaxy-xr-factory-trial'}.GetEnumerator()) {
+    foreach ($item in @{enable=$true; anyHmd=$true; profile=$Profile}.GetEnumerator()) {
         $settings.driver_questlhsync | Add-Member -NotePropertyName $item.Key -NotePropertyValue $item.Value -Force
     }
 }
@@ -45,4 +47,4 @@ $temporary = $settingsPath + '.gxr-update.tmp'
 [IO.File]::WriteAllText($temporary, ($settings | ConvertTo-Json -Depth 100))
 Move-Item -LiteralPath $temporary -Destination $settingsPath -Force
 if ($Rollback) { Write-Host 'Previous driver and QuestLHSync settings restored.' }
-else { Write-Host 'PC compatibility driver updated. Factory trial uses its own state directory.' }
+else { Write-Host "PC compatibility driver updated. Trial profile: $Profile" }

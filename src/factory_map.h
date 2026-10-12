@@ -32,7 +32,8 @@ static int gxr_load_map(const char *path) {
     return 0;
 }
 static int gxr_map_blob(int cam,int *px,int *py) {
-    int x=*px,y=*py;
+    /* Detector/wire coordinates put pixel centres at n+.5; maps use n. */
+    int x=*px-5,y=*py-5;
     if(cam<0 || cam>=4 || x<0 || x>6390 || y<0 || y>6390)return -1;
     int ix=x/10,iy=y/10,dx=x%10,dy=y%10;
     double ox=0,oy=0;
@@ -44,6 +45,6 @@ static int gxr_map_blob(int cam,int *px,int *py) {
         ox+=weight*(double)gxr_map[idx];oy+=weight*(double)gxr_map[idx+1];
     }
     /* Coordinates on the wire are tenths of a pixel. */
-    *px=(int)(ox*.1+.5);*py=(int)(oy*.1+.5);
+    *px=(int)(ox*.1+.5)+5;*py=(int)(oy*.1+.5)+5;
     return (*px>=0 && *px<6400 && *py>=0 && *py<6400)?0:-1;
 }

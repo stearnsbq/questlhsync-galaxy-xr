@@ -44,6 +44,7 @@ def main():
     ap.add_argument('--output-dir', type=Path, required=True)
     args = ap.parse_args()
     inv, cams, calibration = load_factory_geometry(args.inventory, args.head_origin_log, 'mid')
+    calibration['kind'] = 'galaxy_xr_sensor'
 
     def root(command):
         wrapped = command + "; result=$?; printf '\\nQLHS_REMOTE_EXIT=%s\\n' \"$result\""
@@ -77,6 +78,7 @@ def main():
         head_origin_sha256=hashlib.sha256(args.head_origin_log.read_bytes()).hexdigest(),
         max_exposure_ns=3000000, window='mid', valid_grid_points=valid,
         projection_model='window-plane-1m-lut1000',
+        frame_timestamp='sensor-boottime-to-monotonic', pixel_centres='wire-half-pixel',
         head_origin_source='saved_runtime_log_not_automatic',
         status='experimental_private_trial')
     args.output_dir.mkdir(parents=True, exist_ok=True)

@@ -46,6 +46,24 @@ static unsigned long now_ns(void) {
     struct Timespec t; if(clock_gettime(1,&t))return 0;
     return (unsigned long)t.sec*1000000000UL+(unsigned long)t.nsec;
 }
+/* QVR sensor stamps use BOOTTIME; daemon clock replies use MONOTONIC.
+   Measure the offset per frame so a suspend cannot leave it stale. */
+static int sensor_time(unsigned long raw,unsigned long *stamp) {
+    for(int attempt=0;attempt<3;attempt++) {
+        struct Timespec boot;
+        unsigned long a=now_ns();
+        if(!a || clock_gettime(7,&boot))return -1;
+        unsigned long b=now_ns();
+        if(b<a || b-a>200000UL)continue;
+        unsigned long bn=(unsigned long)boot.sec*1000000000UL+(unsigned long)boot.nsec;
+        unsigned long mid=a+(b-a)/2;
+        if(bn<mid || raw<bn-mid)return -1;
+        *stamp=raw-(bn-mid);
+        if(*stamp>b || b-*stamp>1000000000UL)return -1;
+        return 0;
+    }
+    return -1;
+}
 typedef unsigned char u8; typedef unsigned int u32; typedef unsigned long long u64;
 #include "factory_map.h"
 #define MAXB 48
@@ -58,6 +76,8 @@ static unsigned int counts[4],shorts[4],dots[4];
 static int means[4],previous[4],before[4];
 static unsigned long rawtimes[4],opaque16[4];
 static int audit;
+static int sensor_stamped;
+static unsigned long frametimes[4];
 static unsigned long max_exposure_ns;
 static const char *capture_dir;
 static int file_write(int fd,const void *data,usize size) {
@@ -117,7 +137,7 @@ static int analyze(int cam,int seq,unsigned long arrival,int calibrated) {
         struct Timespec boot;clock_gettime(7,&boot);
         unsigned long boot_ns=(unsigned long)boot.sec*1000000000UL+(unsigned long)boot.nsec;
         len=snprintf(line,sizeof(line),"I sample %d %u %lu %lu %lu %lu %d %d",cam,(unsigned int)seq,arrival,boot_ns,rawtimes[cam],opaque16[cam],mean,nbl);
-    } else len=snprintf(line,sizeof(line),"F %d %u %lu %d %d",cam,(unsigned int)seq,arrival/1000,mean,nbl);
+    } else len=snprintf(line,sizeof(line),"F %d %u %lu %d %d",cam,(unsigned int)seq,(sensor_stamped?frametimes[cam]:arrival)/1000,mean,nbl);
     for(int b=0;b<nbl && len<(int)sizeof(line)-80;b++)
         len+=snprintf(line+len,sizeof(line)-(usize)len," %d %d %u %d",bx[b],by[b],np[b],pk[b]);
     line[len++]='\n';return sendall(line,(usize)len);
@@ -134,8 +154,11 @@ int main(int argc,char **argv) {
         max_exposure_ns=(unsigned long)parsed;
         const char *map=getenv("QLHS_FACTORY_MAP");
         if(map && *map) {
+            const char *timing=getenv("QLHS_SENSOR_TIME");
+            if(!timing || strcmp(timing,"1")){dprintf(2,"E factory sensor timing required\n");return 2;}
             if(gxr_load_map(map)){dprintf(2,"E invalid factory pixel map; capture refused\n");return 2;}
             gxr_factory=1;
+            sensor_stamped=1;
         }
     }
     audit=!strcmp(argv[1],"audit");
@@ -195,7 +218,13 @@ int main(int argc,char **argv) {
             int n=-1;if(number(devices[g],&n)||n<0||n==last[g])continue;
             unsigned long data[512];memset(data,0,sizeof(data));
             if(frame(devices[g],&n,0,1,data))continue;
-            unsigned long arrival=now_ns();last[g]=n;seen[g]=arrival;
+            unsigned long arrival=now_ns(),stamp=arrival;last[g]=n;seen[g]=arrival;
+            if(sensor_stamped && (sensor_time(data[1],&stamp) ||
+                (frametimes[g*2] && stamp<=frametimes[g*2]))) {
+                release(devices[g],n);
+                dprintf(2,"E invalid QVR sensor clock; capture refused\n");
+                errors++;running=0;break;
+            }
             if(audit && !inspected[g] && calibration) {
                 inspected[g]=1;unsigned int needed=0;
                 int cr=calibration(devices[g],n,0,&needed,0,0);
@@ -235,7 +264,7 @@ int main(int argc,char **argv) {
             for(int j=0;j<2 && running;j++) {
                 // GetFrame copies a 32-bit exposure field to offset 16; the
                 // following four bytes are not part of its duration.
-                int cam=g*2+j;rawtimes[cam]=data[1];opaque16[cam]=((unsigned int *)data)[4];
+                int cam=g*2+j;rawtimes[cam]=data[1];opaque16[cam]=((unsigned int *)data)[4];frametimes[cam]=stamp;
                 memcpy(S.scratch,copies[j],640*640);
                 if(analyze(cam,n,arrival,calibrated))running=0;
             }
@@ -244,7 +273,7 @@ int main(int argc,char **argv) {
         if(t-heartbeat>=1000000000UL) {
             heartbeat=t;
             for(int c=0;c<4;c++) {
-                char line[400];int len=snprintf(line,sizeof(line),"I gxr cam=%d frames=%u mean10=%d short_candidates=%u blobs=%u raw_timestamp=%lu opaque16=%lu arrival_ns=%lu mode=%s map_rejected=%u\n",c,counts[c],means[c],shorts[c],dots[c],rawtimes[c],opaque16[c],seen[c/2],gxr_factory?"factory-trial":calibrated?"calibrated":"diagnostic",gxr_map_rejected[c]);
+                char line[480];int len=snprintf(line,sizeof(line),"I gxr cam=%d frames=%u mean10=%d short_candidates=%u blobs=%u raw_timestamp=%lu opaque16=%lu arrival_ns=%lu mode=%s map_rejected=%u frame_ns=%lu clock=%s\n",c,counts[c],means[c],shorts[c],dots[c],rawtimes[c],opaque16[c],seen[c/2],gxr_factory?"factory-trial":calibrated?"calibrated":"diagnostic",gxr_map_rejected[c],frametimes[c],sensor_stamped?"sensor-monotonic":"arrival-monotonic");
                 if(sendall(line,(usize)len))running=0;
             }
             if(t-seen[0]>10000000000UL||t-seen[1]>10000000000UL){dprintf(2,"W no frames for ten seconds; headset may be asleep\n");break;}

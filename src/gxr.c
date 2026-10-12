@@ -77,7 +77,8 @@ pid_t hs_capture_start(int out_fd, char *msg, size_t n) {
     execl(exe, exe, calibrated() ? "calibrated" : "diagnostic", (char *)NULL);
     _exit(127);
   }
-  snprintf(msg, n, "GXR tracking + ctrl-tracking; %s; arrival CLOCK_MONOTONIC timestamps",
-           calibrated() ? "measured trial profile enabled" : "diagnostics only (no C/F alignment records)");
+  snprintf(msg, n, "GXR tracking + ctrl-tracking; %s; %s CLOCK_MONOTONIC timestamps",
+           calibrated() ? (getenv("QLHS_FACTORY_MAP") ? "factory trial enabled" : "measured trial profile enabled") : "diagnostics only (no C/F alignment records)",
+           getenv("QLHS_SENSOR_TIME") ? "sensor" : "arrival");
   return pid;
 }

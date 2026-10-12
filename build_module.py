@@ -15,11 +15,11 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE
 FINGERPRINT = 'samsung/xrvst2ue/xrvst2:14/UML2.260301.001/I610UEU2AZF3:user/release-keys'
 LIB_HASH = 'cd34ddf44087a764d67f654b2be77f31fad74fedf164c39193ff5af1f6a62a94'
-VERSION = '0.3.1'
+VERSION = '0.3.2'
 
 
 def validate_calibration(cal):
-    if cal.get('kind') != 'galaxy_xr' or 'CameraCalibration' in cal:
+    if cal.get('kind') not in ('galaxy_xr', 'galaxy_xr_sensor') or 'CameraCalibration' in cal:
         raise ValueError('Galaxy XR profiles must be rejected by older PC drivers')
     cams = cal.get('GxrCameraCalibration', [])
     if len(cams) != 4:
@@ -80,6 +80,8 @@ def verified_profile(path):
         raise ValueError('Validated frames must have exposure <= 3000 us')
     cal = p['calibration']
     validate_calibration(cal)
+    if cal['kind'] != 'galaxy_xr':
+        raise ValueError('Measured arrival-timestamp profiles require kind galaxy_xr')
     return p, (json.dumps(cal, separators=(',', ':'), allow_nan=False) + '\n').encode()
 
 
@@ -95,6 +97,8 @@ def factory_trial_files(directory):
         raise ValueError('Unsupported factory trial exposure/window')
     if p.get('projection_model') != 'window-plane-1m-lut1000':
         raise ValueError('Regenerate factory trial: central window projection required')
+    if p.get('frame_timestamp') != 'sensor-boottime-to-monotonic' or p.get('pixel_centres') != 'wire-half-pixel':
+        raise ValueError('Regenerate factory trial: sensor timestamps and pixel-centre convention required')
     blob = (directory/'factory-map.bin').read_bytes()
     cal = (directory/'calibration.json').read_bytes()
     if len(blob)!=20+4*640*640*8 or blob[:20]!=b'GXRMAP1\0'+struct.pack('<III',640,640,4):
@@ -103,6 +107,8 @@ def factory_trial_files(directory):
         raise ValueError('Factory trial content hash mismatch')
     parsed = json.loads(cal)
     validate_calibration(parsed)
+    if parsed['kind'] != 'galaxy_xr_sensor':
+        raise ValueError('Sensor-stamped frames require explicit PC compatibility')
     for camera in parsed['GxrCameraCalibration']:
         if camera['Projection']['Coefficients'] != [200,200,320,320] or camera['Distortion']['Coefficients'] != [0]*8:
             raise ValueError('Factory map requires matching virtual camera optics')
@@ -112,6 +118,7 @@ def factory_trial_files(directory):
     return {'factory-trial.json': manifest, 'factory-map.bin': blob, 'calibration.json': cal,
             'device.sha256': (p['device_serial_sha256']+'\n').encode(),
             'factory-source.sha256': (p['factory_source_sha256']+'\n').encode(),
+            'frame-timestamp': b'sensor-boottime-to-monotonic\n',
             'max-exposure-ns': b'3000000\n'}
 
 
