@@ -4,23 +4,32 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing version tag to publish (for example v0.4.0); leave blank for build only'
+        required: false
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: build-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+  group: build-${{ github.workflow }}-${{ inputs.release_tag || github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') && !inputs.release_tag }}
 
 jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    outputs:
+      release_tag: ${{ steps.version.outputs.release_tag }}
+      source_sha: ${{ steps.version.outputs.source_sha }}
     env:
       NDK_VERSION: 27.3.13750724
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
           persist-credentials: false
 
       - name: Install Zig 0.16.0
@@ -41,19 +50,26 @@ jobs:
           echo "BIONIC_DIR=$toolchain/sysroot/usr/lib/aarch64-linux-android/29" >> "$GITHUB_ENV"
 
       - name: Check release version and build automatic module
+        id: version
         env:
           BUILD_REF: ${{ github.ref }}
+          REQUESTED_TAG: ${{ inputs.release_tag }}
         run: |
           python3 -m py_compile *.py
           python3 - <<'PY'
           import os
+          import subprocess
           from pathlib import Path
           from build_module import VERSION
           properties = dict(line.split('=', 1) for line in Path('module/module.prop').read_text().splitlines() if '=' in line)
           assert properties['version'] == VERSION, 'Module/build version mismatch'
           ref = os.environ['BUILD_REF']
-          if ref.startswith('refs/tags/'):
-              assert ref == 'refs/tags/v' + VERSION, 'Release tag/version mismatch'
+          tag = os.environ['REQUESTED_TAG'] or (ref.removeprefix('refs/tags/') if ref.startswith('refs/tags/') else '')
+          if tag:
+              assert tag == 'v' + VERSION, 'Release tag/version mismatch'
+          sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'release_tag={tag}\nsource_sha={sha}\n')
           PY
           python3 build_module.py --bionic-dir "$BIONIC_DIR"
 
@@ -91,7 +107,7 @@ jobs:
           retention-days: 14
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: needs.build.outputs.release_tag != ''
     needs: build
     runs-on: ubuntu-24.04
     permissions:
@@ -99,6 +115,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.build.outputs.source_sha }}
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
@@ -107,9 +125,11 @@ jobs:
       - name: Publish private prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
         run: |
           test "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" = true
+          test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$SOURCE_SHA"
           (cd release && sha256sum --check SHA256SUMS)
           gh release create "$RELEASE_TAG" release/*.zip release/SHA256SUMS \
             --verify-tag --prerelease --latest=false \

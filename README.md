@@ -57,6 +57,12 @@ Pushing a matching version tag (for example `v0.4.0`) publishes the verified
 artifact as a prerelease in the private repository. Tags must match both the
 builder and module metadata; calibration data is never uploaded.
 
+To publish an existing tag manually, select **Actions → Build module → Run
+workflow**, use the `main` branch, and enter `v0.4.0` in **Release tag**. The
+workflow builds that tag's source and publishes its artifact after verification.
+Leaving the field blank runs a build only. Branch pushes and pull requests also
+build only, so their release job is expected to be skipped.
+
 ## Repository layout
 
 - `module/`, `src/`, `vendor/questlhsync/`: KernelSU service and native backend.
