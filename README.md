@@ -77,6 +77,10 @@ python -m pip install -r requirements-calibration.txt
 - `prepare_replay.py`: convert an audit for the upstream replay executable;
   `--max-exposure-us` and `--output-dir` support offline comparisons.
 - `triangulate_spots.py`: source-ray consistency analysis, not station identity proof.
+- `inspect_factory_profile.py PROFILE --output build/inventory.json`: inventory
+  tracking-camera intrinsics and extrinsics from a saved device-profile textproto.
+  This does not convert distortion models or enable alignment. The runtime-selected
+  per-device source and its coordinate-frame conventions still require validation.
 - `build_pose_recorder.cmd PATH_TO_QUESTLHSYNC`: build the Windows pose recorder
   using Visual Studio and OpenVR files from a QuestLHSync checkout. Run the
   resulting executable from `build/` while SteamVR is open.
