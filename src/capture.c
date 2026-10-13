@@ -48,21 +48,32 @@ static unsigned long now_ns(void) {
 }
 /* QVR sensor stamps use BOOTTIME; daemon clock replies use MONOTONIC.
    Measure the offset per frame so a suspend cannot leave it stale. */
-static int sensor_time(unsigned long raw,unsigned long *stamp) {
+static struct { unsigned long before,boot,after,offset; } clock_sample;
+static const char *sensor_time(unsigned long raw,unsigned long *stamp) {
+    memset(&clock_sample,0,sizeof(clock_sample));
     for(int attempt=0;attempt<3;attempt++) {
         struct Timespec boot;
         unsigned long a=now_ns();
-        if(!a || clock_gettime(7,&boot))return -1;
+        clock_sample.before=a;
+        if(!a || clock_gettime(7,&boot))return "clock-read";
         unsigned long b=now_ns();
-        if(b<a || b-a>200000UL)continue;
         unsigned long bn=(unsigned long)boot.sec*1000000000UL+(unsigned long)boot.nsec;
+        clock_sample.boot=bn;clock_sample.after=b;
+        if(b<a || b-a>200000UL)continue;
         unsigned long mid=a+(b-a)/2;
-        if(bn<mid || raw<bn-mid)return -1;
-        *stamp=raw-(bn-mid);
-        if(*stamp>b || b-*stamp>1000000000UL)return -1;
+        /* Without accumulated suspend time, BOOTTIME can fall before the
+           midpoint while still inside this MONOTONIC sampling bracket.
+           Its offset is nonnegative; clamp only that in-bracket estimate. */
+        if(bn<a)return "clock-order";
+        unsigned long offset=bn>mid ? bn-mid : 0;
+        clock_sample.offset=offset;
+        if(raw<offset)return "before-clock-origin";
+        *stamp=raw-offset;
+        if(*stamp>b)return "future-frame";
+        if(b-*stamp>1000000000UL)return "stale-frame";
         return 0;
     }
-    return -1;
+    return "sampling-window";
 }
 typedef unsigned char u8; typedef unsigned int u32; typedef unsigned long long u64;
 #include "factory_map.h"
@@ -219,11 +230,15 @@ int main(int argc,char **argv) {
             unsigned long data[512];memset(data,0,sizeof(data));
             if(frame(devices[g],&n,0,1,data))continue;
             unsigned long arrival=now_ns(),stamp=arrival;last[g]=n;seen[g]=arrival;
-            if(sensor_stamped && (sensor_time(data[1],&stamp) ||
-                (frametimes[g*2] && stamp<=frametimes[g*2]))) {
-                release(devices[g],n);
-                dprintf(2,"E invalid QVR sensor clock; capture refused\n");
-                errors++;running=0;break;
+            if(sensor_stamped) {
+                const char *reason=sensor_time(data[1],&stamp);
+                if(!reason && frametimes[g*2] && stamp<=frametimes[g*2])reason="non-increasing-frame";
+                if(reason) {
+                    release(devices[g],n);
+                    dprintf(2,"E invalid QVR sensor clock; capture refused reason=%s group=%s raw=%lu mono_before=%lu boot=%lu mono_after=%lu offset=%lu previous=%lu\n",
+                            reason,names[g],data[1],clock_sample.before,clock_sample.boot,clock_sample.after,clock_sample.offset,frametimes[g*2]);
+                    errors++;running=0;break;
+                }
             }
             if(audit && !inspected[g] && calibration) {
                 inspected[g]=1;unsigned int needed=0;

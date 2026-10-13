@@ -1,4 +1,10 @@
-Initial public release for Samsung Galaxy XR (SM-I610), firmware I610UEU2AZF3.
+Clock startup fix for Samsung Galaxy XR (SM-I610), firmware I610UEU2AZF3.
+
+Fixes rejection of valid camera timestamps when BOOTTIME and MONOTONIC have
+little or no accumulated suspend offset. Clock failures now include the reason
+and sampled values for diagnosis. Future, stale and non-increasing timestamps
+remain rejected. This fix has been checked with simulated clock samples; live
+confirmation on an affected headset is still needed.
 
 Install the `automatic.zip` in KernelSU Manager and reboot. If late root loading
 prevents startup, use the module Action button. Setup reads this headset's factory

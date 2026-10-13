@@ -15,7 +15,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE
 FINGERPRINT = 'samsung/xrvst2ue/xrvst2:14/UML2.260301.001/I610UEU2AZF3:user/release-keys'
 LIB_HASH = 'cd34ddf44087a764d67f654b2be77f31fad74fedf164c39193ff5af1f6a62a94'
-VERSION = '0.4.1'
+VERSION = '0.4.2'
 
 
 def validate_calibration(cal):
