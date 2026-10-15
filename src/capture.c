@@ -161,7 +161,7 @@ int main(int argc,char **argv) {
         if(!limit || !*limit)return 2;
         for(const char *p=limit;*p;p++)if(*p<'0'||*p>'9')return 2;
         int parsed=atoi(limit);
-        if(parsed<1 || parsed>3000000)return 2;
+        if(parsed<1 || parsed>5000000)return 2;
         max_exposure_ns=(unsigned long)parsed;
         const char *map=getenv("QLHS_FACTORY_MAP");
         if(map && *map) {

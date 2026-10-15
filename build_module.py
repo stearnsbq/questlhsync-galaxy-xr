@@ -15,7 +15,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE
 FINGERPRINT = 'samsung/xrvst2ue/xrvst2:14/UML2.260301.001/I610UEU2AZF3:user/release-keys'
 LIB_HASH = 'cd34ddf44087a764d67f654b2be77f31fad74fedf164c39193ff5af1f6a62a94'
-VERSION = '0.4.2'
+VERSION = '0.5.0'
 
 
 def validate_calibration(cal):
@@ -170,7 +170,8 @@ def main():
              '-Wl,-e,_start', '-Wl,--dynamic-linker=/system/bin/linker64', '-Wl,-z,max-page-size=16384',
              str(HERE/'src/start.S'), str(HERE/'src'/source), str(bionic/'libc.so'), str(bionic/'libdl.so'),
              '-o', str(out/binary)])
-    files = {p.name: p.read_bytes().replace(b'\r\n', b'\n') for p in (HERE/'module').iterdir() if p.is_file()}
+    files = {p.relative_to(HERE/'module').as_posix(): p.read_bytes().replace(b'\r\n', b'\n')
+             for p in (HERE/'module').rglob('*') if p.is_file()}
     binaries = ('lhsyncd', 'gxr-lhsight', 'gxr-head-origin', 'gxr-prepare')
     files.update({name: (out/name).read_bytes() for name in binaries})
     files['LICENSE'] = (ROOT/'LICENSE').read_bytes()
@@ -191,13 +192,14 @@ def main():
     # Directory for temporary deployment always reflects this ZIP, without stale profile files.
     stage = out/'stage'
     stage.mkdir(exist_ok=True)
-    for p in stage.iterdir():
-        if p.is_file() and p.name not in files:
+    for p in stage.rglob('*'):
+        if p.is_file() and p.relative_to(stage).as_posix() not in files:
             p.unlink()
     variant = 'factory-trial' if factory_files else 'trial' if profile else 'diagnostic' if args.diagnostic else 'automatic'
     zip_path = out / ('QuestLHSync-GXR-'+VERSION+'-'+variant+'.zip')
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as z:
         for name, data in sorted(files.items()):
+            (stage/name).parent.mkdir(parents=True, exist_ok=True)
             (stage/name).write_bytes(data)
             info = zipfile.ZipInfo(name, (2026, 10, 12, 0, 0, 0))
             info.create_system = 3

@@ -1,10 +1,18 @@
-Clock startup fix for Samsung Galaxy XR (SM-I610), firmware I610UEU2AZF3.
+Configurable exposure cutoff for Samsung Galaxy XR (SM-I610), firmware I610UEU2AZF3.
+
+Adds an offline KernelSU WebUI with a persistent 1–5 ms exposure cutoff and
+Save & apply to restart capture. Automatic factory calibration now defaults to
+5 ms. The cutoff filters frames rather than changing camera exposure. Legacy
+calibration bundles keep their existing limits.
+
+A live 5 ms trial maintained approximately 240 usable frames per second across
+four cameras and 0.28–0.32 degree alignment error during the observed locked
+portion. This is limited testing on one headset, not a guarantee for every setup.
 
 Fixes rejection of valid camera timestamps when BOOTTIME and MONOTONIC have
 little or no accumulated suspend offset. Clock failures now include the reason
 and sampled values for diagnosis. Future, stale and non-increasing timestamps
-remain rejected. This fix has been checked with simulated clock samples; live
-confirmation on an affected headset is still needed.
+remain rejected.
 
 Install the `automatic.zip` in KernelSU Manager and reboot. If late root loading
 prevents startup, use the module Action button. Setup reads this headset's factory

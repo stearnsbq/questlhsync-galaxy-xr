@@ -81,7 +81,7 @@ jobs:
           archive, = Path('build').glob('QuestLHSync-GXR-*-automatic.zip')
           with zipfile.ZipFile(archive) as package:
               assert package.testzip() is None
-              expected = {p.name for p in Path('module').iterdir() if p.is_file()}
+              expected = {p.relative_to('module').as_posix() for p in Path('module').rglob('*') if p.is_file()}
               binaries = ('lhsyncd', 'gxr-lhsight', 'gxr-head-origin', 'gxr-prepare')
               expected.update((*binaries, 'LICENSE', 'README.md', 'automatic-setup'))
               assert set(package.namelist()) == expected

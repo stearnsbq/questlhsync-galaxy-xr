@@ -32,7 +32,8 @@ elif [ -f "$MODDIR/automatic-setup" ]; then
   export QLHS_CALIBRATION_DIR=/dev/questlhsync-gxr/calibration
   export QLHS_FACTORY_MAP="$QLHS_CALIBRATION_DIR/factory-map.bin"
   export QLHS_SENSOR_TIME=1
-  export QLHS_MAX_EXPOSURE_NS=3000000
+  QLHS_MAX_EXPOSURE_NS=$(sh "$MODDIR/settings.sh" get) || exit 2
+  export QLHS_MAX_EXPOSURE_NS
   export QLHS_CALIBRATED=1
 fi
 exec "$MODDIR/lhsyncd" "$MODDIR"

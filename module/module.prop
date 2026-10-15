@@ -1,6 +1,6 @@
 id=questlhsync_gxr
 name=QuestLHSync for Galaxy XR (experimental)
-version=0.4.2
-versionCode=8
+version=0.5.0
+versionCode=9
 author=QuestLHSync contributors
 description=Automatic per-headset factory calibration for QuestLHSync tracking cameras. Requires the Galaxy XR compatible PC driver. SM-I610 AZF3 only.

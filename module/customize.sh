@@ -4,8 +4,12 @@
 . "$MODPATH/guard.sh"
 gxr_guard || abort 'Unsupported firmware or QVR binaries. This build requires SM-I610 AZF3.'
 [ ! -f "$MODPATH/automatic-setup" ] || gxr_calibration_guard || abort 'Unsupported calibration client.'
-set_perm_recursive "$MODPATH" 0 0 0755 0644
-for f in service.sh action.sh run.sh guard.sh prepare.sh uninstall.sh lhsyncd gxr-lhsight gxr-head-origin gxr-prepare; do
+set_perm "$MODPATH" 0 0 0755
+# KernelSU manages webroot permissions and its SELinux context.
+for f in "$MODPATH"/*; do
+  [ ! -f "$f" ] || set_perm "$f" 0 0 0644
+done
+for f in service.sh action.sh run.sh guard.sh prepare.sh settings.sh uninstall.sh lhsyncd gxr-lhsight gxr-head-origin gxr-prepare; do
   set_perm "$MODPATH/$f" 0 0 0755
 done
 ui_print 'Native QVR service: TCP 47280 / UDP 47281.'
