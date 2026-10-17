@@ -4,6 +4,7 @@ const value = document.getElementById('value');
 const status = document.getElementById('status');
 const save = document.getElementById('save');
 const reset = document.getElementById('reset');
+const exit = document.getElementById('exit');
 const command = 'sh /data/adb/modules/questlhsync_gxr/settings.sh ';
 let sequence = 0;
 function busy(on) { slider.disabled = save.disabled = reset.disabled = on; }
@@ -26,6 +27,17 @@ function exec(args) {
   });
 }
 slider.addEventListener('input', display);
+exit.addEventListener('click', () => {
+  try {
+    if (window.ksu && typeof window.ksu.exit === 'function') {
+      window.ksu.exit();
+    } else {
+      status.textContent = 'Use the system Back button to close this page.';
+    }
+  } catch (error) {
+    status.textContent = 'Could not close settings. Use the system Back button.';
+  }
+});
 reset.addEventListener('click', () => { slider.value = '10'; display(); status.textContent = 'Default selected. Save & apply to use it.'; });
 save.addEventListener('click', async () => {
   const ns = Math.round(Number(slider.value) * 10) * 100000;

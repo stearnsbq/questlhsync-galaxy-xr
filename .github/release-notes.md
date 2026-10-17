@@ -1,4 +1,11 @@
-Galaxy XR 0.5.1 for Samsung Galaxy XR (SM-I610), firmware I610UEU2AZF3.
+Galaxy XR 0.5.2 for Samsung Galaxy XR (SM-I610), firmware I610UEU2AZF3.
+
+Adds an **Exit settings** button to close the module's configuration page using
+KernelSU's native WebUI exit action. The button remains available if settings
+fail to load. Managers without the exit API show a reminder to use system Back.
+Exiting does not save pending slider changes; use **Save & apply** first.
+
+Includes the exposure and diagnostic improvements from 0.5.1 described below.
 
 Expands the offline KernelSU WebUI exposure cutoff from 1–5 ms to 1–10 ms,
 in 0.1 ms steps. Automatic factory calibration now defaults to 10 ms, allowing

@@ -16,3 +16,4 @@ button.secondary { background: #303d53; color: #e9edf5; }
 button:disabled { opacity: .5; cursor: default; }
 :focus-visible { outline: 3px solid #d3e1ff; outline-offset: 4px; }
 #status { min-height: 3em; }
+#exit { margin: 0 0 20px; }
