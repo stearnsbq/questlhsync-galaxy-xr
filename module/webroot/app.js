@@ -26,10 +26,10 @@ function exec(args) {
   });
 }
 slider.addEventListener('input', display);
-reset.addEventListener('click', () => { slider.value = '5'; display(); status.textContent = 'Default selected. Save & apply to use it.'; });
+reset.addEventListener('click', () => { slider.value = '10'; display(); status.textContent = 'Default selected. Save & apply to use it.'; });
 save.addEventListener('click', async () => {
   const ns = Math.round(Number(slider.value) * 10) * 100000;
-  if (!Number.isInteger(ns) || ns < 1000000 || ns > 5000000) return;
+  if (!Number.isInteger(ns) || ns < 1000000 || ns > 10000000) return;
   busy(true);
   let saved = false;
   try {
@@ -49,7 +49,7 @@ save.addEventListener('click', async () => {
   }
   try {
     const ns = Number(await exec('get'));
-    if (!Number.isInteger(ns) || ns < 1000000 || ns > 5000000 || ns % 100000) throw new Error('Invalid saved cutoff.');
+    if (!Number.isInteger(ns) || ns < 1000000 || ns > 10000000 || ns % 100000) throw new Error('Invalid saved cutoff.');
     slider.value = String(ns / 1000000); display(); busy(false);
     status.textContent = 'Settings loaded.';
   } catch (error) { status.textContent = error.message; }

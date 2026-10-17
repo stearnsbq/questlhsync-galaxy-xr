@@ -4,19 +4,19 @@ MODDIR=${0%/*}
 STATE=/data/adb/questlhsync-gxr
 CONFIG=$STATE/max-exposure-ns
 valid() {
-  case "$1" in ???????) ;; *) return 1;; esac
+  case "$1" in ???????|10000000) ;; *) return 1;; esac
   case "$1" in *[!0-9]*) return 1;; esac
-  [ "$1" -ge 1000000 ] && [ "$1" -le 5000000 ] && [ "$(( $1 % 100000 ))" -eq 0 ]
+  [ "$1" -ge 1000000 ] && [ "$1" -le 10000000 ] && [ "$(( $1 % 100000 ))" -eq 0 ]
 }
 case "$1" in
   get)
-    VALUE=5000000
+    VALUE=10000000
     if [ -f "$CONFIG" ]; then VALUE=$(cat "$CONFIG") || exit 1; fi
     valid "$VALUE" || { echo 'Invalid saved exposure cutoff.' >&2; exit 2; }
     echo "$VALUE"
     ;;
   set)
-    [ "$#" -eq 2 ] && valid "$2" || { echo 'Choose 1 to 5 ms in 0.1 ms steps.' >&2; exit 2; }
+    [ "$#" -eq 2 ] && valid "$2" || { echo 'Choose 1 to 10 ms in 0.1 ms steps.' >&2; exit 2; }
     umask 077
     mkdir -p "$STATE" || exit 1
     TEMP=$CONFIG.$$

@@ -9,12 +9,12 @@
   <p class="eyebrow">QUESTLHSYNC · GALAXY XR</p>
   <h1>Camera settings</h1>
   <section>
-    <label for="exposure">Exposure cutoff <output id="value" for="exposure">5.0 ms</output></label>
+    <label for="exposure">Exposure cutoff <output id="value" for="exposure">10.0 ms</output></label>
     <p>Accept camera frames with exposures up to this duration.</p>
-    <input id="exposure" type="range" min="1" max="5" step="0.1" value="5" disabled>
-    <div class="scale"><span>1 ms</span><span>5 ms</span></div>
+    <input id="exposure" type="range" min="1" max="10" step="0.1" value="10" disabled>
+    <div class="scale"><span>1 ms</span><span>10 ms</span></div>
     <p>Higher values keep more frames available for alignment. Lower values reject more motion blur but can delay lock or interrupt tracking.</p>
-    <p class="note">Recommended: 5 ms. This filters frames; it does not change the cameras’ exposure settings.</p>
+    <p class="note">Default: 10 ms. Lower cutoffs reduce motion blur but can prevent locking when the cameras use longer exposures. This filters frames; it does not change the cameras’ exposure settings.</p>
     <button id="save" disabled>Save &amp; apply</button>
     <button id="reset" class="secondary" disabled>Use default</button>
     <p class="note">Applying briefly restarts the camera service. Your choice survives reboots and module updates.</p>

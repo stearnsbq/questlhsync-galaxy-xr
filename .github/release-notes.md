@@ -1,18 +1,22 @@
-Configurable exposure cutoff for Samsung Galaxy XR (SM-I610), firmware I610UEU2AZF3.
+Galaxy XR 0.5.1 for Samsung Galaxy XR (SM-I610), firmware I610UEU2AZF3.
 
-Adds an offline KernelSU WebUI with a persistent 1–5 ms exposure cutoff and
-Save & apply to restart capture. Automatic factory calibration now defaults to
-5 ms. The cutoff filters frames rather than changing camera exposure. Legacy
-calibration bundles keep their existing limits.
+Expands the offline KernelSU WebUI exposure cutoff from 1–5 ms to 1–10 ms,
+in 0.1 ms steps. Automatic factory calibration now defaults to 10 ms, allowing
+observations when camera exposure stays above the previous 5 ms limit.
+The cutoff filters captured frames; it does not change camera exposure.
+Longer exposures may reduce accuracy during motion.
 
-A live 5 ms trial maintained approximately 240 usable frames per second across
-four cameras and 0.28–0.32 degree alignment error during the observed locked
-portion. This is limited testing on one headset, not a guarantee for every setup.
+Existing saved cutoffs are preserved during an update. To adopt 10 ms, open
+the module WebUI, choose **Use default**, then **Save & apply**. Legacy calibration
+bundles retain their own limits.
 
-Fixes rejection of valid camera timestamps when BOOTTIME and MONOTONIC have
-little or no accumulated suspend offset. Clock failures now include the reason
-and sampled values for diagnosis. Future, stale and non-increasing timestamps
-remain rejected.
+Adds per-camera cutoff, rejected-exposure, observation-frame, empty-frame and
+accepted-frame-age diagnostics to distinguish exposure rejection from missing
+detections. These counters do not certify an alignment lock. Exposure parsing
+also rejects malformed and out-of-range values without integer overflow.
+
+The wider cutoff has automated policy coverage; this release does not claim
+new headset accuracy or tracking validation at 10 ms.
 
 Install the `automatic.zip` in KernelSU Manager and reboot. If late root loading
 prevents startup, use the module Action button. Setup reads this headset's factory

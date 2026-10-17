@@ -34,13 +34,17 @@ service. The compatible QuestLHSync PC driver must be installed separately.
 ## Settings
 
 Open the module's **WebUI** in KernelSU Manager to adjust the exposure cutoff
-from **1 to 5 ms**, in 0.1 ms steps. The default is **5 ms**. Choose **Save & apply**
+from **1 to 10 ms**, in 0.1 ms steps. The default is **10 ms**. Choose **Save & apply**
 to save your choice and restart the camera service; tracking reconnects shortly.
 
 Higher cutoffs admit more frames; lower cutoffs reject more motion blur but can
 delay lock or interrupt tracking. This setting filters captured frames; it does
 not control the cameras' exposure. It applies to automatic factory calibration.
-Legacy calibration bundles retain their own exposure limits.
+Legacy calibration bundles retain their own exposure limits. Existing saved cutoffs
+are preserved: select **Use default**, then **Save & apply** to use 10 ms.
+The wider range avoids rejecting every frame when automatic exposure stays above
+5 ms. Longer exposures may reduce accuracy during motion; use the lowest cutoff
+that still supplies observations reliably in your lighting.
 
 Settings are stored in `/data/adb/questlhsync-gxr/max-exposure-ns` and survive
 reboots and module updates. The page works offline.
@@ -77,3 +81,12 @@ included in distributed packages.
 
 MIT licensed. Includes code from QuestLHSync by CreoleVR; see
 [vendor provenance](vendor/questlhsync/README.md).
+
+## Lock diagnostics
+
+Each camera status line includes `cutoff_ns`, cumulative `exposure_rejected`,
+`observation_frames` (accepted frames with mapped spots), `empty_frames` (accepted
+frames without mapped spots), and `accepted_age_ms` (`-1` before the first accepted
+frame). Increasing rejection counts with no new observations indicate an exposure
+cutoff problem. Increasing empty-frame counts instead indicate that detection or
+visibility needs investigation. These counters do not certify an alignment lock.

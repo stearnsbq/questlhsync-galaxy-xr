@@ -90,6 +90,9 @@ static int audit;
 static int sensor_stamped;
 static unsigned long frametimes[4];
 static unsigned long max_exposure_ns;
+static unsigned int exposure_rejected[4],observation_frames[4],empty_frames[4];
+static unsigned long last_accepted[4];
+#include "exposure.h"
 static const char *capture_dir;
 static int file_write(int fd,const void *data,usize size) {
     const unsigned char *p=data;
@@ -118,7 +121,7 @@ static int analyze(int cam,int seq,unsigned long arrival,int calibrated) {
     for(int i=0;i<640*640;i+=100)sum+=S.scratch[i];
     int mean=(int)(sum*10/4096);
     int hi=previous[cam]>before[cam]?previous[cam]:before[cam];
-    int is_short=calibrated ? (opaque16[cam]>0 && opaque16[cam]<=max_exposure_ns) :
+    int is_short=calibrated ? gxr_accept_exposure(opaque16[cam],max_exposure_ns) :
         (counts[cam]>=2 && mean*10<hi*6);
     before[cam]=previous[cam];previous[cam]=mean;means[cam]=mean;counts[cam]++;
     int nbl=-1;u64 sx[MAXB],sy[MAXB];u32 np[MAXB];int pk[MAXB];
@@ -135,7 +138,8 @@ static int analyze(int cam,int seq,unsigned long arrival,int calibrated) {
         dots[cam]+=(unsigned int)nbl;
     }
     if(!calibrated && !audit)return 0;
-    if(calibrated && !is_short)return 0;
+    if(calibrated && !is_short){exposure_rejected[cam]++;return 0;}
+    if(calibrated)last_accepted[cam]=arrival;
     int bx[MAXB],by[MAXB],kept=0;
     for(int b=0;b<nbl;b++) {
         int x=(int)(sx[b]/np[b]),y=(int)(sy[b]/np[b]);
@@ -143,6 +147,7 @@ static int analyze(int cam,int seq,unsigned long arrival,int calibrated) {
         bx[kept]=x;by[kept]=y;np[kept]=np[b];pk[kept]=pk[b];kept++;
     }
     nbl=kept;
+    if(calibrated){if(nbl)observation_frames[cam]++;else empty_frames[cam]++;}
     char line[2400];int len;
     if(audit) {
         struct Timespec boot;clock_gettime(7,&boot);
@@ -158,10 +163,8 @@ int main(int argc,char **argv) {
     int calibrated=!strcmp(argv[1],"calibrated");
     if(calibrated) {
         const char *limit=getenv("QLHS_MAX_EXPOSURE_NS");
-        if(!limit || !*limit)return 2;
-        for(const char *p=limit;*p;p++)if(*p<'0'||*p>'9')return 2;
-        int parsed=atoi(limit);
-        if(parsed<1 || parsed>5000000)return 2;
+        unsigned long parsed=gxr_parse_exposure(limit);
+        if(!parsed)return 2;
         max_exposure_ns=(unsigned long)parsed;
         const char *map=getenv("QLHS_FACTORY_MAP");
         if(map && *map) {
@@ -288,7 +291,7 @@ int main(int argc,char **argv) {
         if(t-heartbeat>=1000000000UL) {
             heartbeat=t;
             for(int c=0;c<4;c++) {
-                char line[480];int len=snprintf(line,sizeof(line),"I gxr cam=%d frames=%u mean10=%d short_candidates=%u blobs=%u raw_timestamp=%lu opaque16=%lu arrival_ns=%lu mode=%s map_rejected=%u frame_ns=%lu clock=%s\n",c,counts[c],means[c],shorts[c],dots[c],rawtimes[c],opaque16[c],seen[c/2],gxr_factory?"factory-trial":calibrated?"calibrated":"diagnostic",gxr_map_rejected[c],frametimes[c],sensor_stamped?"sensor-monotonic":"arrival-monotonic");
+                char line[768];int len=snprintf(line,sizeof(line),"I gxr cam=%d frames=%u mean10=%d short_candidates=%u blobs=%u raw_timestamp=%lu opaque16=%lu arrival_ns=%lu mode=%s map_rejected=%u frame_ns=%lu clock=%s cutoff_ns=%lu exposure_rejected=%u observation_frames=%u empty_frames=%u accepted_age_ms=%ld\n",c,counts[c],means[c],shorts[c],dots[c],rawtimes[c],opaque16[c],seen[c/2],gxr_factory?"factory-trial":calibrated?"calibrated":"diagnostic",gxr_map_rejected[c],frametimes[c],sensor_stamped?"sensor-monotonic":"arrival-monotonic",max_exposure_ns,exposure_rejected[c],observation_frames[c],empty_frames[c],last_accepted[c]?(long)((t-last_accepted[c])/1000000UL):-1L);
                 if(sendall(line,(usize)len))running=0;
             }
             if(t-seen[0]>10000000000UL||t-seen[1]>10000000000UL){dprintf(2,"W no frames for ten seconds; headset may be asleep\n");break;}

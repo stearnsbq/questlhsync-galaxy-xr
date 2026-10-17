@@ -40,6 +40,12 @@ jobs:
           tar -xf zig.tar.xz
           echo "$RUNNER_TEMP/zig-x86_64-linux-0.16.0" >> "$GITHUB_PATH"
 
+      - name: Test exposure policy
+        run: |
+          cc -Wall -Wextra -Werror tests/exposure_test.c -o /tmp/exposure-test
+          /tmp/exposure-test
+          python3 -m unittest discover -s tests
+
       - name: Select Android NDK
         run: |
           if [ ! -d "$ANDROID_HOME/ndk/$NDK_VERSION" ]; then
